@@ -4,6 +4,7 @@
 データ入手元: https://communitynotes.x.com/guide/en/under-the-hood/download-data
 ファイルサイズが大きいため、usecolsで必要なカラムのみ読み込む。
 複数ファイル（ratings-00000〜00007等）がある場合は全て結合する。
+max_files で読み込むファイル数を制限できる。
 """
 
 import pandas as pd
@@ -21,8 +22,8 @@ HISTORY_COLS = [
 ]
 
 
-def _find_files(directory: Path, prefix: str) -> list[Path]:
-    """directory 内で prefix にマッチする全 .tsv を探す"""
+def _find_files(directory: Path, prefix: str, max_files: int | None = None) -> list[Path]:
+    """directory 内で prefix にマッチする .tsv を探す（max_files で上限指定可）"""
     candidates = sorted(directory.glob(f"{prefix}*.tsv"))
     if not candidates:
         raise FileNotFoundError(
@@ -30,6 +31,8 @@ def _find_files(directory: Path, prefix: str) -> list[Path]:
             f"\nhttps://communitynotes.x.com/guide/en/under-the-hood/download-data"
             f"\nからダウンロードして配置してください。"
         )
+    if max_files is not None:
+        candidates = candidates[:max_files]
     return candidates
 
 
@@ -54,9 +57,9 @@ def _load_multi(paths: list[Path], usecols, dtype, nrows: int | None = None) -> 
     return combined
 
 
-def load_ratings(raw_dir: Path, nrows: int | None = None) -> pd.DataFrame:
-    """ratings*.tsv を全て読み込んで結合する"""
-    paths = _find_files(raw_dir, "ratings")
+def load_ratings(raw_dir: Path, nrows: int | None = None, max_files: int | None = None) -> pd.DataFrame:
+    """ratings*.tsv を読み込んで結合する。max_files でファイル数を制限。"""
+    paths = _find_files(raw_dir, "ratings", max_files=max_files)
     return _load_multi(
         paths, usecols=RATINGS_COLS,
         dtype={"noteId": str, "raterParticipantId": str},

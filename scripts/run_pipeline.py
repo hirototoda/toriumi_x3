@@ -47,6 +47,8 @@ def main():
     parser = argparse.ArgumentParser(description="Community Notes pipeline")
     parser.add_argument("--nrows", type=int, default=None,
                         help="ratings の読み込み行数制限（notes/history は全量読む）")
+    parser.add_argument("--max-rating-files", type=int, default=None,
+                        help="ratings ファイルの読み込み数 (default: 全ファイル)")
     args = parser.parse_args()
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -55,7 +57,7 @@ def main():
     # ─── Step 0: データ読み込み ───────────────────────
     t0 = time.time()
     print("\n[Step 0] Loading data...")
-    ratings_df = load_ratings(RAW_DIR, nrows=args.nrows)
+    ratings_df = load_ratings(RAW_DIR, nrows=args.nrows, max_files=args.max_rating_files)
 
     try:
         notes_df = load_notes(RAW_DIR)  # notes は全量読む（shard が異なるため）

@@ -125,6 +125,8 @@ def run_regression(feat_df):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--nrows", type=int, default=None)
+    parser.add_argument("--max-rating-files", type=int, default=None,
+                        help="ratings ファイルの読み込み数 (default: 全ファイル)")
     parser.add_argument("--min-ratings", type=int, default=10,
                         help="ノートの最低評価件数 (default: 10)")
     parser.add_argument("--topics-json", type=str, default=None,
@@ -145,7 +147,7 @@ def main():
     # ── データ読み込み ────────────────────────────────
     t0 = time.time()
     print("[Loading data]")
-    ratings_df = load_ratings(RAW_DIR, nrows=args.nrows)
+    ratings_df = load_ratings(RAW_DIR, nrows=args.nrows, max_files=args.max_rating_files)
     notes_df = load_notes(RAW_DIR)
     history_df = load_status_history(RAW_DIR)
 
