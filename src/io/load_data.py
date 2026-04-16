@@ -3,6 +3,7 @@
 
 データ入手元: https://communitynotes.x.com/guide/en/under-the-hood/download-data
 ファイルサイズが大きいため、usecolsで必要なカラムのみ読み込む。
+複数ファイル（ratings-00000〜00007等）がある場合は全て結合する。
 """
 
 import pandas as pd
@@ -20,8 +21,8 @@ HISTORY_COLS = [
 ]
 
 
-def _find_file(directory: Path, prefix: str) -> Path:
-    """directory 内で prefix にマッチする .tsv を探す"""
+def _find_files(directory: Path, prefix: str) -> list[Path]:
+    """directory 内で prefix にマッチする全 .tsv を探す"""
     candidates = sorted(directory.glob(f"{prefix}*.tsv"))
     if not candidates:
         raise FileNotFoundError(
@@ -29,43 +30,55 @@ def _find_file(directory: Path, prefix: str) -> Path:
             f"\nhttps://communitynotes.x.com/guide/en/under-the-hood/download-data"
             f"\nからダウンロードして配置してください。"
         )
-    return candidates[0]
+    return candidates
+
+
+def _load_multi(paths: list[Path], usecols, dtype, nrows: int | None = None) -> pd.DataFrame:
+    """複数ファイルを読み込んで結合する。nrows は合計行数の上限。"""
+    dfs = []
+    remaining = nrows
+    for path in paths:
+        print(f"  Loading {path.name} ...")
+        df = pd.read_csv(
+            path, sep="\t", usecols=usecols, dtype=dtype,
+            nrows=remaining,
+        )
+        dfs.append(df)
+        print(f"    {len(df):,} rows")
+        if remaining is not None:
+            remaining -= len(df)
+            if remaining <= 0:
+                break
+    combined = pd.concat(dfs, ignore_index=True)
+    print(f"  Total: {len(combined):,} rows from {len(dfs)} file(s)")
+    return combined
 
 
 def load_ratings(raw_dir: Path, nrows: int | None = None) -> pd.DataFrame:
-    """ratings.tsv を読み込む(必要カラムのみ)"""
-    path = _find_file(raw_dir, "ratings")
-    print(f"  Loading {path.name} ...")
-    df = pd.read_csv(
-        path, sep="\t", usecols=RATINGS_COLS,
+    """ratings*.tsv を全て読み込んで結合する"""
+    paths = _find_files(raw_dir, "ratings")
+    return _load_multi(
+        paths, usecols=RATINGS_COLS,
         dtype={"noteId": str, "raterParticipantId": str},
         nrows=nrows,
     )
-    print(f"    {len(df):,} rows")
-    return df
 
 
 def load_notes(raw_dir: Path, nrows: int | None = None) -> pd.DataFrame:
-    """notes.tsv を読み込む(必要カラムのみ)"""
-    path = _find_file(raw_dir, "notes")
-    print(f"  Loading {path.name} ...")
-    df = pd.read_csv(
-        path, sep="\t", usecols=NOTES_COLS,
+    """notes*.tsv を全て読み込んで結合する"""
+    paths = _find_files(raw_dir, "notes")
+    return _load_multi(
+        paths, usecols=NOTES_COLS,
         dtype={"noteId": str},
         nrows=nrows,
     )
-    print(f"    {len(df):,} rows")
-    return df
 
 
 def load_status_history(raw_dir: Path, nrows: int | None = None) -> pd.DataFrame:
-    """noteStatusHistory.tsv を読み込む(必要カラムのみ)"""
-    path = _find_file(raw_dir, "noteStatusHistory")
-    print(f"  Loading {path.name} ...")
-    df = pd.read_csv(
-        path, sep="\t", usecols=HISTORY_COLS,
+    """noteStatusHistory*.tsv を全て読み込んで結合する"""
+    paths = _find_files(raw_dir, "noteStatusHistory")
+    return _load_multi(
+        paths, usecols=HISTORY_COLS,
         dtype={"noteId": str},
         nrows=nrows,
     )
-    print(f"    {len(df):,} rows")
-    return df
