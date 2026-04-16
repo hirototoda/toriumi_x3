@@ -8,6 +8,7 @@
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -16,6 +17,11 @@ import statsmodels.api as sm
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+
+def _fmt(seconds: float) -> str:
+    m, s = divmod(int(seconds), 60)
+    return f"{m}m{s:02d}s" if m else f"{s}s"
 
 from src.io.load_data import load_ratings, load_notes, load_status_history
 from src.step1_preprocess.polarity import compute_polarity
@@ -124,20 +130,27 @@ def main():
     args = parser.parse_args()
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    t_total = time.time()
 
     # ── データ読み込み ────────────────────────────────
+    t0 = time.time()
     print("[Loading data]")
     ratings_df = load_ratings(RAW_DIR, nrows=args.nrows)
     notes_df = load_notes(RAW_DIR)
     history_df = load_status_history(RAW_DIR)
 
+    print(f"  ⏱ Loading: {_fmt(time.time() - t0)}")
+
     # ── Step 1: Polarity ──────────────────────────────
+    t1 = time.time()
     print("\n[Step 1] Computing polarity...")
     polarity_df = compute_polarity(ratings_df)
 
     # ── フィルタ（20件以上） ──────────────────────────
     print(f"\n[Step 1] Filtering (>= {args.min_ratings} ratings)...")
     ratings_filtered = filter_by_rating_count(ratings_df, min_count=args.min_ratings)
+
+    print(f"  ⏱ Step 1: {_fmt(time.time() - t1)}")
 
     # ── 品質スコア ────────────────────────────────────
     print("\n[Step 5] Computing quality scores...")
@@ -148,6 +161,7 @@ def main():
     results = []
 
     for topic_name, keywords in TOPICS.items():
+        t_topic = time.time()
         print(f"\n{'='*60}")
         print(f"  Topic: {topic_name}")
         print(f"{'='*60}")
@@ -191,6 +205,7 @@ def main():
             elif p1 < 0.01: sig = "**"
             elif p1 < 0.05: sig = "*"
 
+        print(f"  ⏱ {topic_name}: {_fmt(time.time() - t_topic)}")
         results.append({
             "topic": topic_name,
             "n_notes": n,
@@ -216,7 +231,8 @@ def main():
         p = f"{row['p_typeA']:.4f}" if row["p_typeA"] is not None else "   N/A"
         print(f"  {row['topic']:<20} {row['n_notes']:>6} {row['n_typeA']:>6} {row['n_typeB']:>6} {b:>10} {p:>10} {row['sig']:>4}")
     print("=" * 72)
-    print(f"\n  Output: {OUT_DIR / 'topic_comparison.csv'}")
+    print(f"\n  Total time: {_fmt(time.time() - t_total)}")
+    print(f"  Output: {OUT_DIR / 'topic_comparison.csv'}")
 
 
 if __name__ == "__main__":

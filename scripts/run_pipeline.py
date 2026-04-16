@@ -13,11 +13,18 @@
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 # プロジェクトルートをPATHに追加
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+
+def _fmt(seconds: float) -> str:
+    """秒を 1m23s 形式にフォーマット"""
+    m, s = divmod(int(seconds), 60)
+    return f"{m}m{s:02d}s" if m else f"{s}s"
 
 from src.io.load_data import load_ratings, load_notes, load_status_history
 from src.step1_preprocess.polarity import compute_polarity
@@ -43,8 +50,10 @@ def main():
     args = parser.parse_args()
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    t_total = time.time()
 
     # ─── Step 0: データ読み込み ───────────────────────
+    t0 = time.time()
     print("\n[Step 0] Loading data...")
     ratings_df = load_ratings(RAW_DIR, nrows=args.nrows)
 
@@ -66,14 +75,20 @@ def main():
         has_history = False
         history_df = None
 
+    print(f"  ⏱ Step 0: {_fmt(time.time() - t0)}")
+
     # ─── Step 1: Polarity計算 + フィルタ ─────────────
+    t1 = time.time()
     print("\n[Step 1] Computing polarity...")
     polarity_df = compute_polarity(ratings_df)
 
     print("\n[Step 1] Filtering notes (>= 20 ratings)...")
     ratings_filtered = filter_by_rating_count(ratings_df)
 
+    print(f"  ⏱ Step 1: {_fmt(time.time() - t1)}")
+
     # ─── Step 2: トピック分類 ────────────────────────
+    t2 = time.time()
     print("\n[Step 2] Topic classification...")
     if has_notes:
         # ノート単位でユニークにして分類
@@ -89,7 +104,10 @@ def main():
         ratings_political = ratings_filtered
         notes_classified = None
 
+    print(f"  ⏱ Step 2: {_fmt(time.time() - t2)}")
+
     # ─── Step 3: バースト検出 & 分類 ─────────────────
+    t3 = time.time()
     print("\n[Step 3] Burst detection...")
     burst_df = detect_bursts(ratings_political)
 
@@ -101,7 +119,10 @@ def main():
         burst_out = burst_classified.drop(columns=["burst_raters"])
         burst_out.to_csv(OUT_DIR / "bursts.csv", index=False)
 
+    print(f"  ⏱ Step 3: {_fmt(time.time() - t3)}")
+
     # ─── Step 4: 特徴量構築 & ロジスティック回帰 ─────
+    t4 = time.time()
     print("\n[Step 4] Building features...")
 
     # 品質スコア（notes がある場合のみ）
@@ -134,14 +155,20 @@ def main():
     else:
         reg_result = fit_logistic_regression(feat_df)
 
+    print(f"  ⏱ Step 4: {_fmt(time.time() - t4)}")
+
     # ─── Step 5: ターゲット抽出 ──────────────────────
+    t5 = time.time()
     print("\n[Step 5] Target extraction...")
     targets = extract_target_notes(feat_df)
     targets.to_csv(OUT_DIR / "target_notes.csv", index=False)
 
+    print(f"  ⏱ Step 5: {_fmt(time.time() - t5)}")
+
     # ─── 結果サマリー ────────────────────────────────
+    elapsed = time.time() - t_total
     print("\n" + "=" * 60)
-    print("  Pipeline Complete")
+    print(f"  Pipeline Complete  (total: {_fmt(elapsed)})")
     print("=" * 60)
     print(f"  Total ratings processed: {len(ratings_political):,}")
     print(f"  Raters with polarity:    {len(polarity_df):,}")
