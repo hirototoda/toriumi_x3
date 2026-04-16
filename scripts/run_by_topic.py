@@ -131,6 +131,16 @@ def main():
                         help="ノートの最低評価件数 (default: 10)")
     parser.add_argument("--topics-json", type=str, default=None,
                         help="トピック定義JSONファイルのパス（省略時はデフォルトを使用）")
+    parser.add_argument("--polarity-first-n", type=int, default=50,
+                        help="polarity 計算に使う評価者ごとの最初の評価数 (default: 50)")
+    parser.add_argument("--burst-speed-multiplier", type=float, default=3.0,
+                        help="平均速度の何倍でバーストとみなすか (default: 3.0)")
+    parser.add_argument("--burst-min-count", type=int, default=5,
+                        help="バースト判定に必要な最小評価数 (default: 5)")
+    parser.add_argument("--burst-threshold", type=float, default=None,
+                        help="TypeA/TypeB 分類の極性分散閾値 (default: 中央値で自動)")
+    parser.add_argument("--trend-min-evals", type=int, default=4,
+                        help="トレンド計算に必要な最小評価数 (default: 4)")
     args = parser.parse_args()
 
     # トピック定義の上書き
@@ -156,7 +166,7 @@ def main():
     # ── Step 1: Polarity ──────────────────────────────
     t1 = time.time()
     print("\n[Step 1] Computing polarity...")
-    polarity_df = compute_polarity(ratings_df)
+    polarity_df = compute_polarity(ratings_df, first_n=args.polarity_first_n)
 
     # ── フィルタ（20件以上） ──────────────────────────
     print(f"\n[Step 1] Filtering (>= {args.min_ratings} ratings)...")
@@ -193,7 +203,11 @@ def main():
             continue
 
         # バースト検出・分類
-        burst_df = detect_bursts(ratings_topic)
+        burst_df = detect_bursts(
+            ratings_topic,
+            speed_multiplier=args.burst_speed_multiplier,
+            min_count=args.burst_min_count,
+        )
         if burst_df.empty:
             print("  → no bursts, skipping")
             results.append({
@@ -203,11 +217,12 @@ def main():
             })
             continue
 
-        burst_classified = classify_burst_type(burst_df, polarity_df)
+        burst_classified = classify_burst_type(burst_df, polarity_df, threshold=args.burst_threshold)
 
         # 特徴量 & 回帰
         feat_df = compute_features_for_regression(
-            ratings_topic, burst_classified, history_df, quality
+            ratings_topic, burst_classified, history_df, quality,
+            trend_min_evals=args.trend_min_evals,
         )
         beta1, p1, n, n_a, n_b = run_regression(feat_df)
 

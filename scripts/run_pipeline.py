@@ -49,6 +49,20 @@ def main():
                         help="ratings の読み込み行数制限（notes/history は全量読む）")
     parser.add_argument("--max-rating-files", type=int, default=None,
                         help="ratings ファイルの読み込み数 (default: 全ファイル)")
+    parser.add_argument("--polarity-first-n", type=int, default=50,
+                        help="polarity 計算に使う評価者ごとの最初の評価数 (default: 50)")
+    parser.add_argument("--min-rating-count", type=int, default=20,
+                        help="ノートの最低 rating 数フィルタ (default: 20)")
+    parser.add_argument("--burst-speed-multiplier", type=float, default=3.0,
+                        help="平均速度の何倍でバーストとみなすか (default: 3.0)")
+    parser.add_argument("--burst-min-count", type=int, default=5,
+                        help="バースト判定に必要な最小評価数 (default: 5)")
+    parser.add_argument("--burst-threshold", type=float, default=None,
+                        help="TypeA/TypeB 分類の極性分散閾値 (default: 中央値で自動)")
+    parser.add_argument("--trend-min-evals", type=int, default=4,
+                        help="トレンド計算に必要な最小評価数 (default: 4)")
+    parser.add_argument("--target-top-percent", type=int, default=25,
+                        help="品質スコア上位何%%をターゲットとするか (default: 25)")
     args = parser.parse_args()
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -82,10 +96,10 @@ def main():
     # ─── Step 1: Polarity計算 + フィルタ ─────────────
     t1 = time.time()
     print("\n[Step 1] Computing polarity...")
-    polarity_df = compute_polarity(ratings_df)
+    polarity_df = compute_polarity(ratings_df, first_n=args.polarity_first_n)
 
-    print("\n[Step 1] Filtering notes (>= 20 ratings)...")
-    ratings_filtered = filter_by_rating_count(ratings_df)
+    print(f"\n[Step 1] Filtering notes (>= {args.min_rating_count} ratings)...")
+    ratings_filtered = filter_by_rating_count(ratings_df, min_count=args.min_rating_count)
 
     print(f"  ⏱ Step 1: {_fmt(time.time() - t1)}")
 
@@ -111,10 +125,14 @@ def main():
     # ─── Step 3: バースト検出 & 分類 ─────────────────
     t3 = time.time()
     print("\n[Step 3] Burst detection...")
-    burst_df = detect_bursts(ratings_political)
+    burst_df = detect_bursts(
+        ratings_political,
+        speed_multiplier=args.burst_speed_multiplier,
+        min_count=args.burst_min_count,
+    )
 
     print("\n[Step 3] Burst classification (TypeA/TypeB)...")
-    burst_classified = classify_burst_type(burst_df, polarity_df)
+    burst_classified = classify_burst_type(burst_df, polarity_df, threshold=args.burst_threshold)
 
     # バースト結果を保存
     if not burst_classified.empty:
@@ -143,7 +161,8 @@ def main():
         })
 
     feat_df = compute_features_for_regression(
-        ratings_political, burst_classified, history_df, quality
+        ratings_political, burst_classified, history_df, quality,
+        trend_min_evals=args.trend_min_evals,
     )
 
     # 回帰を実行（type_aとtype_bに分散がある場合のみ）
@@ -162,7 +181,7 @@ def main():
     # ─── Step 5: ターゲット抽出 ──────────────────────
     t5 = time.time()
     print("\n[Step 5] Target extraction...")
-    targets = extract_target_notes(feat_df)
+    targets = extract_target_notes(feat_df, top_percent=args.target_top_percent)
     targets.to_csv(OUT_DIR / "target_notes.csv", index=False)
 
     print(f"  ⏱ Step 5: {_fmt(time.time() - t5)}")

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 
-def compute_trend(ratings_df: pd.DataFrame) -> pd.Series:
+def compute_trend(ratings_df: pd.DataFrame, min_evals: int = 4) -> pd.Series:
     """
     各ノートの評価推移（Trend）を計算する。
     初期の平均スコアと後期の平均スコアの差。
@@ -20,9 +20,11 @@ def compute_trend(ratings_df: pd.DataFrame) -> pd.Series:
     df = df.dropna(subset=["score"])
     df = df.sort_values("createdAtMillis")
 
+    _min = min_evals
+
     def _trend(g):
         n = len(g)
-        if n < 4:
+        if n < _min:
             return 0.0
         half = n // 2
         return g["score"].iloc[half:].mean() - g["score"].iloc[:half].mean()
@@ -38,6 +40,7 @@ def compute_features_for_regression(
     burst_df: pd.DataFrame,
     history_df: pd.DataFrame,
     quality: pd.Series,
+    trend_min_evals: int = 4,
 ) -> pd.DataFrame:
     """
     ロジスティック回帰用の特徴量DataFrameを構築する。
@@ -60,7 +63,7 @@ def compute_features_for_regression(
         burst_flags = pd.Series(dtype=str, name="burst_type")
 
     # Trend
-    trend = compute_trend(ratings_df)
+    trend = compute_trend(ratings_df, min_evals=trend_min_evals)
 
     # NEEDS_MORE_RATINGS / UNKNOWN は回帰から除外（判定済みのみ使用）
     valid_statuses = {"CURRENTLY_RATED_HELPFUL", "CURRENTLY_RATED_NOT_HELPFUL"}
