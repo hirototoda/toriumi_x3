@@ -127,7 +127,17 @@ def main():
     parser.add_argument("--nrows", type=int, default=None)
     parser.add_argument("--min-ratings", type=int, default=10,
                         help="ノートの最低評価件数 (default: 10)")
+    parser.add_argument("--topics-json", type=str, default=None,
+                        help="トピック定義JSONファイルのパス（省略時はデフォルトを使用）")
     args = parser.parse_args()
+
+    # トピック定義の上書き
+    global TOPICS
+    if args.topics_json:
+        import json
+        with open(args.topics_json) as f:
+            TOPICS = json.load(f)
+        print(f"  Topics loaded from {args.topics_json}: {list(TOPICS.keys())}")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     t_total = time.time()
