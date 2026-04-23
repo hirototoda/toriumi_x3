@@ -63,6 +63,9 @@ def main():
                         help="トレンド計算に必要な最小評価数 (default: 4)")
     parser.add_argument("--target-top-percent", type=int, default=25,
                         help="品質スコア上位何%%をターゲットとするか (default: 25)")
+    parser.add_argument("--quality-model-path", type=str, default=None,
+                        help="品質モデル (joblib) のパス。未指定時は models/quality_model.joblib を試し、"
+                             "無ければヒューリスティックにフォールバック")
     args = parser.parse_args()
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -147,7 +150,7 @@ def main():
 
     # 品質スコア（notes がある場合のみ）
     if has_notes:
-        quality = compute_quality_score(notes_unique)
+        quality = compute_quality_score(notes_unique, model_path=args.quality_model_path)
     else:
         quality = None
 

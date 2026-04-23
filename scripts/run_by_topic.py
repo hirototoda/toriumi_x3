@@ -141,6 +141,9 @@ def main():
                         help="TypeA/TypeB 分類の極性分散閾値 (default: 中央値で自動)")
     parser.add_argument("--trend-min-evals", type=int, default=4,
                         help="トレンド計算に必要な最小評価数 (default: 4)")
+    parser.add_argument("--quality-model-path", type=str, default=None,
+                        help="品質モデル (joblib) のパス。未指定時は models/quality_model.joblib を試し、"
+                             "無ければヒューリスティックにフォールバック")
     args = parser.parse_args()
 
     # トピック定義の上書き
@@ -177,7 +180,7 @@ def main():
     # ── 品質スコア ────────────────────────────────────
     print("\n[Step 5] Computing quality scores...")
     notes_unique = notes_df.drop_duplicates("noteId")
-    quality = compute_quality_score(notes_unique)
+    quality = compute_quality_score(notes_unique, model_path=args.quality_model_path)
 
     # ── トピック別実行 ────────────────────────────────
     results = []
