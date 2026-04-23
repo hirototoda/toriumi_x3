@@ -55,11 +55,20 @@ def build_features(
         if s not in VALID_STATUSES:
             continue
         bt = burst_flag.get(nid)
+        # bt は None (バースト無し) / "A" / "B" / pd.NA (バーストはあるが分類不能).
+        # NA は run_logit の dropna() で落とすために type_a/type_b を NaN にする
+        # (旧実装は `1 if bt == "A" else 0` で NA 比較が TypeError を起こしていた)
+        if bt is not None and pd.isna(bt):
+            type_a = np.nan
+            type_b = np.nan
+        else:
+            type_a = 1 if bt == "A" else 0
+            type_b = 1 if bt == "B" else 0
         rows.append({
             "noteId":            nid,
             "deleted":           0 if s == "CURRENTLY_RATED_HELPFUL" else 1,
-            "type_a":            1 if bt == "A" else 0,
-            "type_b":            1 if bt == "B" else 0,
+            "type_a":            type_a,
+            "type_b":            type_b,
             "quality":           float(quality.get(nid, np.nan)),
             "ratings_count":     int(rcount.get(nid, 0)),
         })
