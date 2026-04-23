@@ -49,6 +49,12 @@ def main():
                         help="ratings の読み込み行数制限（notes/history は全量読む）")
     parser.add_argument("--max-rating-files", type=int, default=None,
                         help="ratings ファイルの読み込み数 (default: 全ファイル)")
+    parser.add_argument("--file-offset", type=int, default=0,
+                        help="ratings ファイルの読み込み開始位置。先頭から N 個飛ばす (default: 0)")
+    parser.add_argument("--skip-rows", type=int, default=0,
+                        help="ratings の先頭から何行をスキップするか。file_offset 適用後のファイル群に対して連結ストリーム先頭基準 (default: 0)")
+    parser.add_argument("--chunk-suffix", type=str, default="",
+                        help="出力ファイル名の末尾に付ける識別子 (例: '_f0_r0')")
     parser.add_argument("--polarity-first-n", type=int, default=50,
                         help="polarity 計算に使う評価者ごとの最初の評価数 (default: 50)")
     parser.add_argument("--min-rating-count", type=int, default=20,
@@ -74,7 +80,13 @@ def main():
     # ─── Step 0: データ読み込み ───────────────────────
     t0 = time.time()
     print("\n[Step 0] Loading data...")
-    ratings_df = load_ratings(RAW_DIR, nrows=args.nrows, max_files=args.max_rating_files)
+    ratings_df = load_ratings(
+        RAW_DIR,
+        nrows=args.nrows,
+        max_files=args.max_rating_files,
+        file_offset=args.file_offset,
+        skip_rows=args.skip_rows,
+    )
 
     try:
         notes_df = load_notes(RAW_DIR)  # notes は全量読む（shard が異なるため）
@@ -138,9 +150,10 @@ def main():
     burst_classified = classify_burst_type(burst_df, polarity_df, threshold=args.burst_threshold)
 
     # バースト結果を保存
+    suffix = args.chunk_suffix
     if not burst_classified.empty:
         burst_out = burst_classified.drop(columns=["burst_raters"])
-        burst_out.to_csv(OUT_DIR / "bursts.csv", index=False)
+        burst_out.to_csv(OUT_DIR / f"bursts{suffix}.csv", index=False)
 
     print(f"  ⏱ Step 3: {_fmt(time.time() - t3)}")
 
@@ -185,7 +198,7 @@ def main():
     t5 = time.time()
     print("\n[Step 5] Target extraction...")
     targets = extract_target_notes(feat_df, top_percent=args.target_top_percent)
-    targets.to_csv(OUT_DIR / "target_notes.csv", index=False)
+    targets.to_csv(OUT_DIR / f"target_notes{suffix}.csv", index=False)
 
     print(f"  ⏱ Step 5: {_fmt(time.time() - t5)}")
 

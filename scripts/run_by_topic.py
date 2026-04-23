@@ -127,6 +127,12 @@ def main():
     parser.add_argument("--nrows", type=int, default=None)
     parser.add_argument("--max-rating-files", type=int, default=None,
                         help="ratings ファイルの読み込み数 (default: 全ファイル)")
+    parser.add_argument("--file-offset", type=int, default=0,
+                        help="ratings ファイルの読み込み開始位置。先頭から N 個飛ばす (default: 0)")
+    parser.add_argument("--skip-rows", type=int, default=0,
+                        help="ratings の先頭から何行をスキップするか (default: 0)")
+    parser.add_argument("--chunk-suffix", type=str, default="",
+                        help="出力ファイル名の末尾に付ける識別子 (例: '_f0_r0')")
     parser.add_argument("--min-ratings", type=int, default=10,
                         help="ノートの最低評価件数 (default: 10)")
     parser.add_argument("--topics-json", type=str, default=None,
@@ -160,7 +166,13 @@ def main():
     # ── データ読み込み ────────────────────────────────
     t0 = time.time()
     print("[Loading data]")
-    ratings_df = load_ratings(RAW_DIR, nrows=args.nrows, max_files=args.max_rating_files)
+    ratings_df = load_ratings(
+        RAW_DIR,
+        nrows=args.nrows,
+        max_files=args.max_rating_files,
+        file_offset=args.file_offset,
+        skip_rows=args.skip_rows,
+    )
     notes_df = load_notes(RAW_DIR)
     history_df = load_status_history(RAW_DIR)
 
@@ -248,7 +260,8 @@ def main():
 
     # ── 比較表出力 ────────────────────────────────────
     res_df = pd.DataFrame(results)
-    res_df.to_csv(OUT_DIR / "topic_comparison.csv", index=False)
+    suffix = args.chunk_suffix
+    res_df.to_csv(OUT_DIR / f"topic_comparison{suffix}.csv", index=False)
 
     print("\n")
     print("=" * 72)
@@ -262,7 +275,7 @@ def main():
         print(f"  {row['topic']:<20} {row['n_notes']:>6} {row['n_typeA']:>6} {row['n_typeB']:>6} {b:>10} {p:>10} {row['sig']:>4}")
     print("=" * 72)
     print(f"\n  Total time: {_fmt(time.time() - t_total)}")
-    print(f"  Output: {OUT_DIR / 'topic_comparison.csv'}")
+    print(f"  Output: {OUT_DIR / f'topic_comparison{suffix}.csv'}")
 
 
 if __name__ == "__main__":
