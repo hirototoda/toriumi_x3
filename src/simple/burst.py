@@ -10,8 +10,12 @@ TypeA / TypeB:
   大きい                                  → B (自然拡散)
   分散の閾値 = 全バースト分散の中央値 (相対基準)
 
-polarity が分からない rater しか居ないバースト → 分類不能なので NaN にして
-回帰側で dropna する (旧コードは強制 B にしていた; これはバイアスを生むので削除)
+polarity が分からない rater しか居ないバースト = 分類不能。
+この場合は bursts DataFrame から行ごと除外する (= そのノートは「バーストなし」
+扱いになり、回帰の type_a / type_b が両方 0 になる)。
+旧実装は強制 B にしていたがバイアスを生むため不採用。
+NaN burst_type を残す案も試したが回帰側で NA 比較の TypeError を引き起こすので不採用。
+「除外」が一番副作用が無く、簡潔。
 """
 
 import numpy as np
@@ -56,7 +60,9 @@ def detect_bursts(
 
 
 def classify_burst_type(bursts: pd.DataFrame, polarity: pd.DataFrame) -> pd.DataFrame:
-    """polarity 分散の中央値で TypeA / TypeB を分ける. polarity 不明は NaN."""
+    """polarity 分散の中央値で TypeA / TypeB を分ける.
+    polarity 不明 (分散 NaN) のバーストは行ごと除外して返す.
+    """
     if bursts.empty:
         out = bursts.copy()
         out["polarity_variance"] = pd.Series(dtype=float)
@@ -77,21 +83,16 @@ def classify_burst_type(bursts: pd.DataFrame, polarity: pd.DataFrame) -> pd.Data
     out = bursts.copy()
     out["polarity_variance"] = variances
 
-    valid = out["polarity_variance"].dropna()
-    if valid.empty:
-        out["burst_type"] = np.nan
-        print("[burst] no polarity-resolvable bursts")
+    n_dropped = int(out["polarity_variance"].isna().sum())
+    out = out.dropna(subset=["polarity_variance"]).reset_index(drop=True)
+    if out.empty:
+        out["burst_type"] = pd.Series(dtype=str)
+        print(f"[burst] no polarity-resolvable bursts (dropped {n_dropped})")
         return out
 
-    threshold = valid.median()
-    # NaN と文字列 ("A"/"B") を同居させるため dtype=object で組み立てる
-    btype = pd.Series([pd.NA] * len(out), index=out.index, dtype=object)
-    mask_valid = out["polarity_variance"].notna()
-    btype.loc[mask_valid &  (out["polarity_variance"] <= threshold)] = "A"
-    btype.loc[mask_valid &  (out["polarity_variance"] >  threshold)] = "B"
-    out["burst_type"] = btype
-    n_a = (out["burst_type"] == "A").sum()
-    n_b = (out["burst_type"] == "B").sum()
-    n_n = out["burst_type"].isna().sum()
-    print(f"[burst] TypeA={n_a}, TypeB={n_b}, NaN={n_n} (threshold={threshold:.4f})")
+    threshold = out["polarity_variance"].median()
+    out["burst_type"] = np.where(out["polarity_variance"] <= threshold, "A", "B")
+    n_a = int((out["burst_type"] == "A").sum())
+    n_b = int((out["burst_type"] == "B").sum())
+    print(f"[burst] TypeA={n_a}, TypeB={n_b}, dropped(unresolvable)={n_dropped} (threshold={threshold:.4f})")
     return out
