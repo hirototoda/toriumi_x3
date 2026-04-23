@@ -70,8 +70,8 @@ def main() -> None:
     ratings = load_ratings_for_notes(RAW_DIR, sample_ids)
     history = load_history_for_notes(RAW_DIR, sample_ids)
     if ratings.empty:
-        print("\nERROR: no ratings for sampled notes. Aborting.")
-        return
+        print("\nERROR: no ratings for sampled notes. Aborting.", file=sys.stderr)
+        sys.exit(1)
 
     # 3. polarity
     polarity = compute_polarity(ratings, first_n=args.polarity_first_n, seed=args.seed)
@@ -91,8 +91,8 @@ def main() -> None:
     # 6. 特徴量 + 回帰
     feat = build_features(ratings, bursts, history, quality)
     if feat.empty:
-        print("\nERROR: no features built. Aborting.")
-        return
+        print("\nERROR: no features built. Aborting.", file=sys.stderr)
+        sys.exit(1)
     feat.to_csv(OUT_DIR / "simple_features.csv", index=False)
     res = run_logit(feat)
 
