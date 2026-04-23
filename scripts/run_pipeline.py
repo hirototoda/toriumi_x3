@@ -26,8 +26,15 @@ def _fmt(seconds: float) -> str:
     m, s = divmod(int(seconds), 60)
     return f"{m}m{s:02d}s" if m else f"{s}s"
 
-from src.io.load_data import load_ratings, load_notes, load_status_history
-from src.step1_preprocess.polarity import compute_polarity
+from src.io.cache import (
+    load_ratings_cached,
+    load_notes_cached,
+    load_status_history_cached,
+    compute_polarity_cached,
+    compute_quality_cached,
+    ratings_cache_tag,
+    notes_cache_tag,
+)
 from src.step1_preprocess.merge_data import merge_tsv_files
 from src.step1_preprocess.filter import filter_by_rating_count
 from src.step2_topic.classify import classify_political_topics
@@ -35,7 +42,6 @@ from src.step3_burst.detect import detect_bursts
 from src.step3_burst.classify_burst import classify_burst_type
 from src.step4_regression.features import compute_features_for_regression
 from src.step4_regression.logistic import fit_logistic_regression
-from src.step5_target.quality_score import compute_quality_score
 from src.step5_target.target_extraction import extract_target_notes
 
 
@@ -80,25 +86,32 @@ def main():
     # ─── Step 0: データ読み込み ───────────────────────
     t0 = time.time()
     print("\n[Step 0] Loading data...")
-    ratings_df = load_ratings(
+    ratings_df = load_ratings_cached(
         RAW_DIR,
         nrows=args.nrows,
         max_files=args.max_rating_files,
         file_offset=args.file_offset,
         skip_rows=args.skip_rows,
     )
+    r_tag = ratings_cache_tag(
+        RAW_DIR,
+        nrows=args.nrows, max_files=args.max_rating_files,
+        file_offset=args.file_offset, skip_rows=args.skip_rows,
+    )
 
     try:
-        notes_df = load_notes(RAW_DIR)  # notes は全量読む（shard が異なるため）
+        notes_df = load_notes_cached(RAW_DIR)  # notes は全量読む（shard が異なるため）
+        n_tag = notes_cache_tag(RAW_DIR)
         has_notes = True
     except FileNotFoundError as e:
         print(f"  WARNING: {e}")
         print("  → notes なしで続行 (Step2 topic filter スキップ, Step5 Q=0)")
         has_notes = False
         notes_df = None
+        n_tag = None
 
     try:
-        history_df = load_status_history(RAW_DIR)  # history は全量読む
+        history_df = load_status_history_cached(RAW_DIR)  # history は全量読む
         has_history = True
     except FileNotFoundError as e:
         print(f"  WARNING: {e}")
@@ -111,7 +124,9 @@ def main():
     # ─── Step 1: Polarity計算 + フィルタ ─────────────
     t1 = time.time()
     print("\n[Step 1] Computing polarity...")
-    polarity_df = compute_polarity(ratings_df, first_n=args.polarity_first_n)
+    polarity_df = compute_polarity_cached(
+        ratings_df, first_n=args.polarity_first_n, ratings_tag=r_tag,
+    )
 
     print(f"\n[Step 1] Filtering notes (>= {args.min_rating_count} ratings)...")
     ratings_filtered = filter_by_rating_count(ratings_df, min_count=args.min_rating_count)
@@ -163,7 +178,9 @@ def main():
 
     # 品質スコア（notes がある場合のみ）
     if has_notes:
-        quality = compute_quality_score(notes_unique, model_path=args.quality_model_path)
+        quality = compute_quality_cached(
+            notes_unique, model_path=args.quality_model_path, notes_tag=n_tag,
+        )
     else:
         quality = None
 

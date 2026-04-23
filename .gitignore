@@ -28,6 +28,7 @@ data/raw/*.tsv
 data/raw/*.csv
 data/interim/*
 data/processed/*
+data/cache/*
 *.zip
 
 # .gitkeep は除外しない

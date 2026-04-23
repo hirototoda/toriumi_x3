@@ -23,13 +23,19 @@ def _fmt(seconds: float) -> str:
     m, s = divmod(int(seconds), 60)
     return f"{m}m{s:02d}s" if m else f"{s}s"
 
-from src.io.load_data import load_ratings, load_notes, load_status_history
-from src.step1_preprocess.polarity import compute_polarity
+from src.io.cache import (
+    load_ratings_cached,
+    load_notes_cached,
+    load_status_history_cached,
+    compute_polarity_cached,
+    compute_quality_cached,
+    ratings_cache_tag,
+    notes_cache_tag,
+)
 from src.step1_preprocess.filter import filter_by_rating_count
 from src.step3_burst.detect import detect_bursts
 from src.step3_burst.classify_burst import classify_burst_type
 from src.step4_regression.features import compute_features_for_regression
-from src.step5_target.quality_score import compute_quality_score
 
 RAW_DIR = ROOT / "data" / "raw"
 OUT_DIR = ROOT / "data" / "processed"
@@ -166,22 +172,30 @@ def main():
     # ── データ読み込み ────────────────────────────────
     t0 = time.time()
     print("[Loading data]")
-    ratings_df = load_ratings(
+    ratings_df = load_ratings_cached(
         RAW_DIR,
         nrows=args.nrows,
         max_files=args.max_rating_files,
         file_offset=args.file_offset,
         skip_rows=args.skip_rows,
     )
-    notes_df = load_notes(RAW_DIR)
-    history_df = load_status_history(RAW_DIR)
+    r_tag = ratings_cache_tag(
+        RAW_DIR,
+        nrows=args.nrows, max_files=args.max_rating_files,
+        file_offset=args.file_offset, skip_rows=args.skip_rows,
+    )
+    notes_df = load_notes_cached(RAW_DIR)
+    n_tag = notes_cache_tag(RAW_DIR)
+    history_df = load_status_history_cached(RAW_DIR)
 
     print(f"  ⏱ Loading: {_fmt(time.time() - t0)}")
 
     # ── Step 1: Polarity ──────────────────────────────
     t1 = time.time()
     print("\n[Step 1] Computing polarity...")
-    polarity_df = compute_polarity(ratings_df, first_n=args.polarity_first_n)
+    polarity_df = compute_polarity_cached(
+        ratings_df, first_n=args.polarity_first_n, ratings_tag=r_tag,
+    )
 
     # ── フィルタ（20件以上） ──────────────────────────
     print(f"\n[Step 1] Filtering (>= {args.min_ratings} ratings)...")
@@ -192,7 +206,9 @@ def main():
     # ── 品質スコア ────────────────────────────────────
     print("\n[Step 5] Computing quality scores...")
     notes_unique = notes_df.drop_duplicates("noteId")
-    quality = compute_quality_score(notes_unique, model_path=args.quality_model_path)
+    quality = compute_quality_cached(
+        notes_unique, model_path=args.quality_model_path, notes_tag=n_tag,
+    )
 
     # ── トピック別実行 ────────────────────────────────
     results = []
