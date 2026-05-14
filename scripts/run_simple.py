@@ -73,6 +73,16 @@ def main() -> None:
         print("\nERROR: no ratings for sampled notes. Aborting.", file=sys.stderr)
         sys.exit(1)
 
+    # 後段の追加分析 (e.g. scripts/experiments/burst_helpfulness.py) が
+    # raw TSV (5GB) を再スキャンせず済むよう、サンプル済 ratings を parquet
+    # キャッシュとして書き出す。frac=0.30 で ~50-100MB 程度。
+    cache_path = OUT_DIR / "simple_ratings.parquet"
+    try:
+        ratings.to_parquet(cache_path, index=False)
+        print(f"[cache] {cache_path} ({cache_path.stat().st_size/1e6:.1f} MB)")
+    except Exception as e:
+        print(f"[cache] parquet save skipped: {e}")
+
     # 3. polarity
     polarity = compute_polarity(ratings, first_n=args.polarity_first_n, seed=args.seed)
 

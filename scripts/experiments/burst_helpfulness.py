@@ -51,7 +51,21 @@ def load_bursts() -> pd.DataFrame:
 
 
 def load_ratings_in_bursts(burst_note_ids: set[str]) -> pd.DataFrame:
-    """ratings をチャンク読みしながら burst 対象 noteId だけ拾う"""
+    """サンプル ratings を取得する.
+
+    パイプライン本体 (scripts/run_simple.py) が data/processed/simple_ratings.parquet
+    を吐いていればそれを使い (即時)、無ければ raw TSV (5GB) を再スキャンする
+    (~2-5 分)。
+    """
+    cache = PROCESSED / "simple_ratings.parquet"
+    if cache.exists():
+        r = pd.read_parquet(cache)
+        r["noteId"] = r["noteId"].astype(str)
+        r = r[r["noteId"].isin(burst_note_ids)]
+        print(f"[load] ratings from cache ({cache.name}): {len(r):,}")
+        return r
+
+    print(f"[load] cache {cache.name} not found, falling back to raw TSV scan")
     paths = _find(RAW, "ratings")
     kept = []
     for p in paths:
