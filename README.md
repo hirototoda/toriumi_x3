@@ -1,73 +1,103 @@
-# コミュニティノート「信者バトル」仮説検証
+# コミュニティノート「陣営反応バースト」仮説検証
 
 ## 仮説
 
-Xコミュニティノートのステータス変化（Helpful / Not Helpful / 削除など）は、ノートの品質ではなく、**同一政治クラスタによる集中的な評価（陣営反応）**によって引き起こされている。
+X コミュニティノートのステータス変化 (Helpful / Not Helpful / 削除) は、ノートの品質ではなく **同一政治クラスタによる集中的な評価 (陣営反応)** によって引き起こされているのではないか。
 
-## データ入手手順
+## 発表で使うのはこの 1 本だけ
 
-本プロジェクトでは、X公式が公開しているCommunity Notesのパブリックデータを使用する（独自スクレイピングはしない）。
+```
+notebooks/colab_simple.ipynb        ← Colab でこれを実行
+└── scripts/run_simple.py           ← 上のセルから呼び出される
+    └── src/simple/                 ← 中身の実装 (理解すべきはここ)
+```
 
-1. 公式ページを開く: https://communitynotes.x.com/guide/en/under-the-hood/download-data
-2. 以下の3ファイルをダウンロードする:
-   - `notes.tsv`
-   - `ratings.tsv`
-   - `noteStatusHistory.tsv`
-3. ダウンロードしたファイルを `data/raw/` に配置する
-4. ダウンロード日を `docs/data_source.md` に記録する
+実行手順:
 
-> **注意**: データファイルは数百MB〜GB級のため、Gitには含めない（`.gitignore`で除外済み）。
+1. Google Colab で [notebooks/colab_simple.ipynb](notebooks/colab_simple.ipynb) を開く
+2. ★ 設定セルで `SAMPLE_FRAC` と `SEED` を指定
+3. 上から順にセルを実行 → `data/processed/simple_regression.txt` 等が出力される
+4. **頑健性チェック**: `SEED = 1, 2, 3` で 3 回回し、β_typeA の符号が一致 + 2回以上 p<0.05 なら「結果は頑健」と判断
 
-## 分析パイプライン（5ステップ）
+詳細はスライド原稿 [docs/slides_simple.md](docs/slides_simple.md) 参照。
 
-| Step | 内容 | 担当 |
-|------|------|------|
-| Step 1 | 前処理・polarity計算（3TSV結合、bridging再実装、最初の50件で固定） | Sさん (p3-4) |
-| Step 2 | トピック分類（政治トピック抽出、APIコスト$0目標） | Gさん (p5-6) |
-| Step 3 | バースト検出・分類（3倍速+5件以上、TypeA/TypeB判定） | Gさん (p5-6) |
-| Step 4 | ロジスティック回帰（β0〜β4推定、統制変数で品質を排除） | 自分 (p7-9) |
-| Step 5 | 品質スコアQ・ターゲット抽出・検証 | 自分 (p7-9) |
+## データ入手
 
-### 結論の判断基準
+X 公式の Community Notes パブリックデータ (独自スクレイピングなし):
 
-- **TypeAのみ有意** → 陣営反応が主因（仮説支持）
-- **TypeA・B両方有意** → 自然拡散が主因の可能性
-- **どちらも無意** → 別要因を探す
+1. https://communitynotes.x.com/guide/en/under-the-hood/download-data
+2. `notes.tsv`, `ratings.tsv`, `noteStatusHistory.tsv` を `data/raw/` に配置 (Colab 実行時は Drive にアップロード)
+3. ダウンロード日を [docs/data_source.md](docs/data_source.md) に記録
+
+データは数百MB〜GB級のため git 管理外 (`.gitignore` 済み)。
 
 ## フォルダ構造
 
 ```
 .
-├── README.md               # 本ファイル
-├── TODO.md                 # TODOリスト
-├── .gitignore
+├── README.md
+├── TODO.md
 ├── requirements.txt
 ├── data/
-│   ├── raw/                # 公式TSVを配置（git管理外）
-│   ├── interim/            # 中間生成物
-│   └── processed/          # 最終分析用データ
+│   ├── raw/             ← 公式TSV (git管理外)
+│   ├── interim/         ← 中間生成物
+│   └── processed/       ← simple_regression.txt 等の最終出力
+├── docs/                ← スライド原稿・データソースメモ
+│
+├── notebooks/
+│   ├── colab_simple.ipynb        ★ 発表用 (これだけ実行)
+│   └── experiments/              付随研究 (H1派生, フル処理版)
+│
 ├── scripts/
-│   └── download_data.sh    # データダウンロード補助
+│   ├── download_data.sh
+│   ├── run_simple.py             ★ colab_simple から呼ばれる本体
+│   └── experiments/              付随研究の実行スクリプト群
+│
 ├── src/
-│   ├── io/                 # TSVローダー
-│   ├── step1_preprocess/   # 結合・polarity・フィルタ
-│   ├── step2_topic/        # トピック分類
-│   ├── step3_burst/        # バースト検出・分類
-│   ├── step4_regression/   # ロジスティック回帰
-│   └── step5_target/       # 品質スコア・ターゲット抽出・検証
-├── notebooks/              # Jupyter探索・結果確認
+│   ├── io/                       共通ローダー
+│   ├── simple/         ★ 発表用パイプラインの実装 (理解すべきはここ)
+│   ├── simple_h1/                H1 派生 (TypeA/B × direction)
+│   └── step1_preprocess/ 〜 step5_target/, step4_regression(_v2)/   フルデータ版
+│
 ├── tests/
-└── docs/                   # スライドメモ・データソースメモ
+└── archive/             明らかに不要になったものの退避先 (git 履歴は追える)
 ```
 
-## セットアップ
+## 発表用パイプラインの中身
+
+[src/simple/](src/simple/) の各ファイルがスライドと 1 対 1 対応:
+
+| スライド | ファイル | 内容 |
+|---|---|---|
+| 6 (トピック/サンプリング) | [src/simple/load.py](src/simple/load.py), [src/simple/topic.py](src/simple/topic.py) | noteId サンプリング、政治キーワード抽出 |
+| 7-8 (Polarity) | [src/simple/polarity.py](src/simple/polarity.py) | TruncatedSVD 2次元 + 最初50件で固定 |
+| 9-10 (Burst, TypeA/B) | [src/simple/burst.py](src/simple/burst.py) | 速度3倍 & 5件、polarity分散の中央値で A/B 判定 |
+| 11 (Quality) | [src/simple/quality.py](src/simple/quality.py) | LLM 学習済み固定重み (URL数, 文字数, ドメイン信頼性) |
+| 12 (回帰) | [src/simple/regression.py](src/simple/regression.py) | 4変数モデル、trend を bad control として除外 |
+
+## 結論の判定基準
+
+回帰係数の符号と有意性で判定:
+
+- **TypeA のみ有意** → 陣営反応が主因 (仮説支持)
+- **TypeA・B 両方有意** → 自然拡散が主因の可能性
+- **どちらも有意でない** → 別要因を探す
+
+## セットアップ (ローカル開発用)
 
 ```bash
 pip install -r requirements.txt
+# 動作確認用のミニ実行 (本番データは Colab で)
+python scripts/run_simple.py --sample-frac 0.02 --seed 1
 ```
 
-## 担当分担
+ローカルマシンは全データを扱えないので、本番実行は必ず Colab で行うこと。
 
-- **Sさん**: p3-4（データ前処理・Step1 polarity計算）
-- **Gさん**: p5-6（Step2 トピック分類・Step3 バースト検出）
-- **自分**: p7-9（Step4 回帰・Step5 品質スコア・結論）
+## 付随研究 (発表対象外)
+
+詳しくは各 `experiments/` 直下の README:
+
+- [src/simple_h1/](src/simple_h1/) — H1 派生 (バーストの方向 helpful/nothelp で TypeA を分割)
+- `src/step1_preprocess` 〜 `step5_target`, `step4_regression(_v2)` — フルデータ処理パイプライン
+- [scripts/experiments/](scripts/experiments/) — 上記用の実行スクリプト群
+- [notebooks/experiments/](notebooks/experiments/) — 上記用の Colab ノートブック

@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 
@@ -212,6 +212,7 @@ def main():
 
     # ── トピック別実行 ────────────────────────────────
     results = []
+    feat_dfs = []  # 全トピックの特徴量を蓄積（マージ後の再回帰用）
 
     for topic_name, keywords in TOPICS.items():
         t_topic = time.time()
@@ -255,6 +256,13 @@ def main():
             ratings_topic, burst_classified, history_df, quality,
             trend_min_evals=args.trend_min_evals,
         )
+
+        # マージ後の再回帰用に特徴量を蓄積（topic 列を付与）
+        if not feat_df.empty:
+            feat_with_topic = feat_df.copy()
+            feat_with_topic.insert(0, "topic", topic_name)
+            feat_dfs.append(feat_with_topic)
+
         beta1, p1, n, n_a, n_b = run_regression(feat_df)
 
         sig = ""
@@ -278,6 +286,12 @@ def main():
     res_df = pd.DataFrame(results)
     suffix = args.chunk_suffix
     res_df.to_csv(OUT_DIR / f"topic_comparison{suffix}.csv", index=False)
+
+    # ── 特徴量出力（マージ後の再回帰用） ──────────────
+    if feat_dfs:
+        all_feats = pd.concat(feat_dfs, ignore_index=True)
+        all_feats.to_csv(OUT_DIR / f"features_by_topic{suffix}.csv", index=False)
+        print(f"  features_by_topic{suffix}.csv: {len(all_feats):,} rows ({all_feats['topic'].nunique()} topics)")
 
     print("\n")
     print("=" * 72)

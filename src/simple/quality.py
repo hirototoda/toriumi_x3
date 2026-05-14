@@ -2,7 +2,7 @@
 Quality スコア (LLM ラベル学習済みの重みをハードコード)
 
 200 件のノートを Claude が {0,1} ラベル付け → ロジスティック回帰を学習
-(scripts/train_quality_model.py 参照, CV AUC = 0.894)
+(scripts/experiments/train_quality_model.py 参照, CV AUC = 0.894)
 
 ここでは学習済 joblib をブラックボックスで呼ばず、係数を定数として
 書き写しておく。再学習しない限り重みは変わらないし、何が起きているか
@@ -21,7 +21,7 @@ Quality スコア (LLM ラベル学習済みの重みをハードコード)
    LLM ラベルから読み取れる事前知識と整合する。
 
 再学習方法:
-    python scripts/train_quality_model.py train
+    python scripts/experiments/train_quality_model.py train
     上で出た `coef:` `scaler.mean_:` `scaler.scale_:` をこの定数に書き写す。
 """
 

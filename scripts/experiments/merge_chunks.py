@@ -5,12 +5,13 @@
   python scripts/merge_chunks.py
 
 対象 (data/processed/ 配下):
-  - bursts_f*_r*.csv            → bursts_all.csv
-  - target_notes_f*_r*.csv      → target_notes_all.csv
-  - topic_comparison_f*_r*.csv  → topic_comparison_all.csv
+  - bursts_f*_r*.csv             → bursts_all.csv
+  - target_notes_f*_r*.csv       → target_notes_all.csv
+  - topic_comparison_f*_r*.csv   → topic_comparison_all.csv
+  - features_by_topic_f*_r*.csv  → features_by_topic_all.csv  (再回帰用)
 
 挙動:
-  - concat してから noteId (または topic) でデドゥープ (最初を採用)
+  - concat してから noteId (または topic+noteId) でデドゥープ (最初を採用)
   - 既存の *_all.csv があれば上書き
   - 1 チャンクしか存在しなくても実行可能
 """
@@ -20,7 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 PROCESSED = ROOT / "data" / "processed"
 
 
@@ -35,12 +36,13 @@ def _extract_chunk_tag(name: str) -> str:
     return stem
 
 
-def merge_one(pattern: str, out_name: str, dedup_on: str | None) -> None:
+def merge_one(pattern: str, out_name: str, dedup_on) -> None:
     """pattern にマッチする CSV を読み込んで out_name に結合保存する。
 
     dedup_on:
-      - カラム名を指定: concat 後にそのキーでデドゥープ (最初を採用)
-      - None:          デドゥープせず、全行残す (各行に chunk 列を付与)
+      - str:        その単一カラムでデドゥープ (最初を採用)
+      - list[str]:  複数カラムの組み合わせでデドゥープ
+      - None:       デドゥープせず、全行残す (各行に chunk 列を付与)
     """
     paths = sorted(PROCESSED.glob(pattern))
     if not paths:
@@ -58,11 +60,13 @@ def merge_one(pattern: str, out_name: str, dedup_on: str | None) -> None:
     combined = pd.concat(dfs, ignore_index=True)
     total = len(combined)
 
-    if dedup_on and dedup_on in combined.columns:
-        combined = combined.drop_duplicates(subset=[dedup_on], keep="first")
-        deduped = total - len(combined)
-        if deduped:
-            print(f"    ⚠ {deduped:,} 件の重複 ({dedup_on}) を除去 (最初のレコードを採用)")
+    if dedup_on:
+        keys = [dedup_on] if isinstance(dedup_on, str) else list(dedup_on)
+        if all(k in combined.columns for k in keys):
+            combined = combined.drop_duplicates(subset=keys, keep="first")
+            deduped = total - len(combined)
+            if deduped:
+                print(f"    ⚠ {deduped:,} 件の重複 ({'+'.join(keys)}) を除去 (最初のレコードを採用)")
 
     out_path = PROCESSED / out_name
     combined.to_csv(out_path, index=False)
@@ -76,9 +80,10 @@ def main() -> int:
 
     print(f"Merging chunk outputs from {PROCESSED}")
 
-    merge_one("bursts_f*_r*.csv",           "bursts_all.csv",           dedup_on="noteId")
-    merge_one("target_notes_f*_r*.csv",     "target_notes_all.csv",     dedup_on="noteId")
-    merge_one("topic_comparison_f*_r*.csv", "topic_comparison_all.csv", dedup_on=None)
+    merge_one("bursts_f*_r*.csv",            "bursts_all.csv",            dedup_on="noteId")
+    merge_one("target_notes_f*_r*.csv",      "target_notes_all.csv",      dedup_on="noteId")
+    merge_one("topic_comparison_f*_r*.csv",  "topic_comparison_all.csv",  dedup_on=None)
+    merge_one("features_by_topic_f*_r*.csv", "features_by_topic_all.csv", dedup_on=["topic", "noteId"])
 
     print("\nDone.")
     return 0
