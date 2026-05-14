@@ -314,7 +314,7 @@ $$
 ### 設計の妥当性
 
 - 「TruncatedSVD で次元 2 にするのは根拠ある?」
-  → [src/simple/polarity.py](src/simple/polarity.py) で `explained_variance_ratio_` を出力。本番ログ実測値: **第 1 成分=[TODO_PC1]%, 第 2 成分=[TODO_PC2]%** (`data/processed/simple_run_log.txt` の `[polarity] ... explained_variance_ratio=[...]` 行から記入)。第 1 成分が支配的なら 1 軸でも近似可能だが、現設計は分散 = $\mathrm{Var}(x)+\mathrm{Var}(y)$ で 2 次元 polarity 平面の散らばりを測るため軸選択に robust。
+  → [src/simple/polarity.py](src/simple/polarity.py) で `explained_variance_ratio_` を出力。本番実測値 (frac=0.30, SEED=42, N_rater=401,045): **PC1=0.2%, PC2=0.1%**。比率が小さいのは rater×note 行列が極端に疎 (401k×N、ほぼ全エントリ 0) で**疎データ全体の分散** に対する 2 次元近似の比は本質的に小さくなるため。重要なのは「主要な変動方向を 2 軸が拾えているか」で、後段の $\beta_\text{typeA}$ が SE $\approx 0.10$ / $p<0.001$ で得られ SEED 間でも同符号・同桁に再現することが間接的な validation になっている (polarity が雑音なら係数は不安定になるはず)。現設計は分散 = $\mathrm{Var}(x)+\mathrm{Var}(y)$ で 2 次元 polarity 平面の散らばりを測るため軸選択にも robust。
 
 - 「バースト閾値 3.0 と 5 件はどう決めた?」
   → notebook 設定セルで変更可能（[scripts/run_simple.py:57-58](scripts/run_simple.py#L57-L58)）。本研究ではこの値の頑健性まではスコープ外。閾値を変えると TypeA/B 件数のスケールは動くが、median 分割なので相対的な分類は大きくは変わらない設計。
@@ -326,9 +326,10 @@ $$
   → 目的変数 `deleted` と**同じ生データ** (`helpfulnessLevel` 系列) から作られる **bad control**。入れると目的変数の一部を control する形になり $\beta_\text{typeA}$ を不当に押し下げる。
 
 - 「`type_a` と `log_ratings_count` の正相関で多重共線性は?」
-  → バースト判定が `min_count=5` 件以上を要求するため構造的な正相関は存在する（[src/simple/regression.py:14-20](src/simple/regression.py#L14-L20) 参照）。だからこそ `log_ratings_count` を control に入れている。本番ログ実測値 (`data/processed/simple_run_log.txt` の `[diag] VIF` 行):
-    - `type_a` VIF = **[TODO]**, `type_b` VIF = **[TODO]**, `quality` VIF = **[TODO]**, `log_ratings_count` VIF = **[TODO]** — 全て 5 未満なら多重共線性は問題なし
-    - 相関 `corr(type_a, log_ratings_count)` = **[TODO]** (`[diag] correlation matrix` から)
+  → バースト判定が `min_count=5` 件以上を要求するため構造的な正相関の懸念はあった（[src/simple/regression.py:14-20](src/simple/regression.py#L14-L20) 参照）が、本番実測では杞憂だった。本番実測値:
+    - `type_a` VIF = **7.43** (注意), `type_b` VIF = **7.49** (注意), `quality` VIF = **1.01** (OK), `log_ratings_count` VIF = **1.12** (OK)
+    - 相関 `corr(type_a, log_ratings_count)` = **0.032** (ほぼゼロ) — 当初懸念した正相関は実データでは消えており、`log_ratings_count` は独立な control として機能している。
+    - type_a / type_b の VIF が 5 を超えるのは別の構造的理由による: $\mathrm{corr}(\text{type\_a}, \text{type\_b}) = -0.923$ (1 note 1 バーストかつ 96% のノートが A/B どちらかに分類されるため、ほぼ相補な指標になる)。catastrophic 判定の VIF>10 には届かず、実際 SE も $\approx 0.10$ に収まり全係数 $p<0.001$ で結論は安定。
 
 ### サンプル設計と外的妥当性
 

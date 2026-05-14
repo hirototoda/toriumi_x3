@@ -1,40 +1,45 @@
-# TODO
+# TODO — 発表までの作業
 
-## 前提: 公式データのダウンロード
+スライド `docs/slides_simple.md` の Q&A 数値埋め込みから発表当日まで。
+Colab で frac=0.30, SEED=42 の cell 9 を実行中 → 完了後に着手。
 
-- [ ] https://communitynotes.x.com/guide/en/under-the-hood/download-data から
-      `notes.tsv`, `ratings.tsv`, `noteStatusHistory.tsv` を `data/raw/` にダウンロード
-- [ ] ダウンロード日付を `docs/data_source.md` に記録
+## Phase 1 — 数値埋め込み (cell 9 完了直後, ~5 分)
 
-## 今日の授業のゴール1: 手動作業の前まで完了させる
+- [ ] cell 9 完了確認 → 以下 4 ブロックをチャットに貼り付け
+  - [ ] `[polarity] ... explained_variance_ratio=[..., ...]`
+  - [ ] `[diag] VIF (Variance Inflation Factor):` 4 行
+  - [ ] `[diag] correlation matrix:` 表
+  - [ ] (おまけ) burst_helpfulness 再実行後の `[TypeA]/[TypeB] mean_score`
+- [ ] `docs/slides_simple.md` の placeholder 7 箇所を実数値に置換
+  - [ ] Q5 (L317): `TODO_PC1`, `TODO_PC2`
+  - [ ] Q9 (L330-331): VIF×4 と相関×1
+- [ ] `data/processed/runs_2026-05-14.md` の Run B 末尾テンプレ 3 ブロックに実値流し込み
+- [ ] 1 コミットで commit & push
 
-- [ ] Step0 I/O: 公式TSVのヘッダー確認 & usecols指定でのローダー実装
-- [ ] Step1 前処理: 3ファイルをnoteIdで結合するコード
-- [ ] Step1 polarity計算: bridgingアルゴリズム(公式OSS)の再実装
-- [ ] Step1 polarity固定: 各評価者の最初の50件でpolarityを確定
-- [ ] Step1 フィルタ: 総評価数20件以上のノートに絞り込み
-- [ ] Step2 トピック分類: 政治トピック抽出(APIコスト$0の手法を確定・実装)
-- [ ] Step3 バースト検出: 平均評価速度の3倍以上 かつ 5件以上の区間抽出
-- [ ] Step3 バースト分類: polarity分散でTypeA/TypeBラベル付け
+## Phase 2 — 内容レビュー (~15〜30 分)
 
-→ ここまで完了で「手動作業(200件ラベル付け)を始められる状態」
+- [ ] Q5/Q9 を音読チェック (数値が文意と整合: VIF 全部 < 5 か、PC1 が支配的か等)
+- [ ] スライド 1〜14 本文の最終読み合わせ (Q&A 数値追加で矛盾が出ていないか)
+- [ ] 想定質問パート全体の流れ確認 (抜け漏れがないか)
 
-## 今日の授業のゴール2: その後のコードを基本完成させる
+## Phase 3 — PDF レンダリング & 見た目チェック (~10〜20 分)
 
-- [ ] Step4 統制変数: Trend(過去スコア推移) と Quality(Q) の算出
-- [ ] Step4 ロジスティック回帰: β0〜β4推定 + 有意性検定(statsmodels)
-- [ ] Step5 品質スコアQ: URL数 + ドメイン信頼性 + 文字数(正規化)
-- [ ] Step5 ターゲット抽出: {Q上位25%} ∩ {TypeAバースト} ∩ {非Helpful}
-- [ ] Step5 検証パイプライン: 200件サンプリング+ラベル投入待ち状態まで
+- [ ] `slides_simple.md` → `slides_simple.pdf` 再生成 (普段の手順: Marp / Pandoc 等)
+- [ ] PDF 目視: 数式の崩れ / コードブロックはみ出し / ページ割り / フッター
+- [ ] 崩れがあれば markdown 修正 → 再レンダリング
 
-## 授業後に残す手動作業
+## Phase 4 — 発表準備 (~30〜60 分)
 
-- [ ] 200件のノートを人手/LLMで「高品質/低品質」にラベル付け
-- [ ] Qスコアとの一致率を確認
+- [ ] ドライラン 1 回 (時計を見て 14 枚 × 10〜12 分の想定通りか)
+- [ ] talking points メモ (特に Q5/Q9 の「なぜ 2 次元」「なぜ多重共線性 OK」を即答できるように)
+- [ ] 想定質問 Q1〜Qn の口頭回答練習 (埋めた数値を口で言える状態に)
 
-## 注意点
+## Phase 5 — 発表当日
 
-- データは公式公開TSVのみを使用(独自スクレイピングはしない)
-- Step2のトピック分類手法が未定 → 早い段階で方針を決め切る
-- Step1の「最初の50件でpolarity固定」は循環論法回避のため必須
-- 品質スコアQはhelpfulness投票と独立であることが仮説検証の生命線
+- [ ] PDF をローカル & クラウド両方に持参 (バックアップ)
+- [ ] Colab notebook も開いておく (再現性質問に備える)
+- [ ] 発表 (10〜12 分) + Q&A
+
+## クリティカルパス
+
+Phase 1 → 3 → 4.1 (ドライラン) が最短。Phase 2 / 4.2 / 4.3 は時間が許す限り深掘り。
