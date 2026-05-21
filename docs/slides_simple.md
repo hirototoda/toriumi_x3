@@ -3,84 +3,132 @@ title: Community Notes における「陣営反応バースト」仮説の検証
 subtitle: colab_simple.ipynb パイプラインの説明
 ---
 
-# スライド構成案（目安 12〜14 枚 / 発表 10〜12 分）
+# 本編 (6 枚 / 発表 ~6 分)
 
 各スライドは `---` で区切り。囲み数式は LaTeX (`$...$`, `$$...$$`) で書く。
+発表者は **手法パート**を担当する想定。結果・考察は他メンバーが補足する前提でサマリのみ載せる。
+スライド外の詳細 (Polarity の循環論法回避、Quality スコア、頑健性、想定質問) は本ファイル後半の **Appendix** に温存。
 
 ---
 
-## スライド 1 — タイトル
+## スライド 1 — 問いと仮説
 
-**Community Notes は「陣営反応」で潰されているのか？**
-— X (旧 Twitter) 公開データによるロジスティック回帰分析 —
+**問い**: Community Notes は「陣営反応」で潰されているのか？
+— 政治的に不都合な note に対し、反対陣営が短時間で集中的に Not Helpful を押し、合意形成を妨げているのではないか。
 
-- 発表者 / 所属 / 日付
-- 一言サブタイトル:「バーストの質」を測って、Not Helpful 化との関係を見る
-
----
-
-## スライド 2 — 背景と問い
-
-- **Community Notes**: X のクラウドソース型ファクトチェック。ユーザーが note を書き、他ユーザーが Helpful / Not Helpful を評価する。
-- 一定の合意が取れた note だけが表示される。取れなければ `CURRENTLY_RATED_NOT_HELPFUL` となり非表示に。
-- 懸念:
-  > 政治的に不都合な note に対して、反対陣営が短時間で集中的に Not Helpful を押し、合意形成を妨げているのでは?
-- **本発表の問い**: この「陣営による集中投票＝陣営反応バースト」が、note の Not Helpful 化を実際に予測するのか。
-
----
-
-## スライド 3 — 仮説と判定基準
-
-バーストを 2 種類に分けて比較する。
+**仮説の切り分け**: バーストを 2 種類に分けて比較する。
 
 | 種別 | 定義（直感） | 役割 |
 |---|---|---|
 | **TypeA** | 「同じ陣営」が集中評価したバースト | 陣営反応の指標 |
 | **TypeB** | 「いろんな陣営」が集中評価したバースト | 自然拡散の指標（対照） |
 
-**判定**
-
-| 結果 | 解釈 |
-|---|---|
-| TypeA のみ有意 ($p<0.05$) | **仮説支持** — 陣営反応が主因 |
-| TypeA / TypeB 両方有意 | 仮説部分支持 — 自然拡散も効く（注） |
-| TypeB のみ有意 | 仮説不支持 |
-| どちらも非有意 | 仮説不支持 / サンプル不足 |
-
-> 注: 両方有意のときは $\beta_\text{typeA}$ と $\beta_\text{typeB}$ の**大小**で陣営反応の主因度を議論する。$\beta_\text{typeA} > \beta_\text{typeB}$ なら陣営反応寄り、$\beta_\text{typeB} > \beta_\text{typeA}$ なら自然拡散寄りと読む。
+**判定**: TypeA のみ有意 ($p<0.05$, $\beta_\text{typeA}>0$) なら **仮説支持**。両方有意なら $|\beta|$ の大小で主因を議論。
 
 ---
 
-## スライド 4 — 使用データ
+## スライド 2 — データとパイプライン全体像
 
-X が公開している 3 種の TSV（日次更新）:
+**データ**: X が公開する Community Notes の 3 種 TSV（日次更新）
+- `notes-*.tsv` (本文・分類) / `ratings-*.tsv` (評価ログ) / `noteStatusHistory-*.tsv` (最終ステータス)
+- 本番 `SAMPLE_FRAC = 0.30` で noteId 単位サンプリング
 
-- `notes-*.tsv` — note 本体（`noteId`, 本文 `summary`, classification など）
-- `ratings-*.tsv` — 評価ログ（`raterParticipantId`, `noteId`, `helpfulnessLevel`, `createdAtMillis`）
-- `noteStatusHistory-*.tsv` — 各 note の最終ステータス（`CURRENTLY_RATED_HELPFUL` 等）
+**パイプライン** (`scripts/run_simple.py` の 6 ステップ)
 
-**Simple 版** では `noteId` をランダムサンプリング → 該当 rating/history のみ読み込み。
-- **本番**: `SAMPLE_FRAC = 0.30`（計算時間 10〜15 分目安）
-- **スモークテスト**: `SAMPLE_FRAC = 0.01`（パイプライン動作確認用、N≈数百）
-
----
-
-## スライド 5 — パイプライン全体像
-
-`scripts/run_simple.py` の 6 ステップ:
-
-1. notes 全件読込 → **政治トピック**で絞り込み → `noteId` を frac サンプリング
-2. サンプリングされた noteId に紐づく ratings / history を読み込み
-3. **Polarity 計算** (TruncatedSVD, 次元 2)
-4. **バースト検出** + **TypeA/B 分類**
-5. **Quality スコア**（LLM ラベル学習済の固定重み）
+1. notes 読込 → **政治トピック**で絞り込み → noteId を `frac` サンプリング
+2. 該当 ratings / history のみチャンク読み
+3. **Polarity 計算** (TruncatedSVD, 次元 2) — 各 rater を 2D ベクトルに
+4. **バースト検出** + **TypeA / TypeB 分類**
+5. **Quality スコア** (LLM ラベル学習済の固定重み)
 6. **ロジスティック回帰** (相関行列 / VIF 診断つき)
 
-> ここから各ステップの数式を説明する。
+> 本編では 3–4 と 6 を中心に説明。1, 2, 5 は appendix 参照。
 
 ---
 
-## スライド 6 — ① 政治トピック抽出 / ② サンプリング
+## スライド 3 — 手法 ① Polarity (評価者の立場ベクトル)
+
+**目的**: 各 rater を 2D ベクトル $(x, y)$ で表し「似た note を同じように評価する人」を近づける。
+
+**手順**
+
+1. 評価を数値化:
+   $$ s = \begin{cases} +1 & \text{HELPFUL} \\ 0 & \text{SOMEWHAT\_HELPFUL} \\ -1 & \text{NOT\_HELPFUL} \end{cases} $$
+2. **各 rater の最初の $N=50$ 件だけ**採用（後述の循環論法回避のため）。
+3. 疎行列 $M \in \mathbb{R}^{R \times N_\text{note}}$ に対し **Truncated SVD** で rank-2 近似:
+   $$ M \approx U_2\, \Sigma_2\, V_2^{\!\top},\quad \text{polarity}_i = U_2[i,:]\cdot \Sigma_2 $$
+
+**「最初の 50 件」の理由 (循環論法回避)**: 全期間の評価を使うと「note が削除された後」の評価も polarity に混ざり、polarity が目的変数 `deleted` の情報を含んでしまう (target leakage)。先頭 50 件で固定すれば polarity は **時間的に先行する** 量になる。
+
+---
+
+## スライド 4 — 手法 ② バースト検出と TypeA/B 分類
+
+**バースト条件** (1 ノート内・連続 $k=5$ 件のウィンドウ):
+$$ v_\text{local}(i) = \frac{k}{\max(t_{i+k-1}-t_i,\ 1\text{ms})}\ \ge\ 3.0 \cdot v_\text{avg} $$
+直感: 「**その note の普段ペースの 3 倍以上速く、5 件連続で評価が来た区間**」。1 note につき先頭 1 バーストのみ採用。
+
+**TypeA / TypeB 分類** — バースト中 $k$ 人の polarity 分散の和を計算:
+$$ V = \mathrm{Var}(x_1,\dots,x_k) + \mathrm{Var}(y_1,\dots,y_k) $$
+$$ \text{burst\_type} = \begin{cases} A & V \le \tilde V \quad(\text{同じ陣営 = 陣営反応}) \\ B & V > \tilde V \quad(\text{バラバラ = 自然拡散}) \end{cases} $$
+
+$\tilde V$ は全バーストの $V$ の **中央値**。相対基準にすることでサンプル依存を避ける。
+
+---
+
+## スライド 5 — 手法 ③ ロジスティック回帰
+
+**目的変数**: $\text{deleted} = \mathbb{1}[\text{status}=\text{CURRENTLY\_RATED\_NOT\_HELPFUL}]$
+
+**回帰式** (log-odds):
+
+$$
+\log\!\frac{\Pr(\text{deleted}=1)}{\Pr(\text{deleted}=0)}
+= \beta_0
++ \beta_1\,\text{type\_a}
++ \beta_2\,\text{type\_b}
++ \beta_3\,\text{quality}
++ \beta_4\,\log(1+\text{ratings\_count})
+$$
+
+**設計上のポイント**
+
+- `type_a`, `type_b` $\in \{0,1\}$ (1 note 1 バーストなので両方 1 にはならない)
+- $\log(1+\text{ratings\_count})$ で**人気度を control** — バーストは構造的に評価数と正相関するため必須
+- ナイーブな `trend` (前半−後半スコア) は目的変数と同じ生データ由来の **bad control** なので除外
+- 相関行列と VIF を自動 print し多重共線性を確認
+
+---
+
+## スライド 6 — 結果と判定
+
+**実行条件**: `SAMPLE_FRAC = 0.30`, `SEED = 42` / N = 14,253 (政治 notes), deleted 28.4%
+
+**ロジスティック回帰** (`deleted ~ type_a + type_b + quality + log_ratings_count`)
+
+| 変数 | $\beta$ | $p$ |
+|---|---:|---:|
+| `type_a`            | $-1.129$ | $<0.001$ |
+| `type_b`            | $-0.404$ | $<0.001$ |
+| `quality`           | $-1.865$ | $<0.001$ |
+| `log_ratings_count` | $-0.603$ | $<0.001$ |
+| (const)             | $+3.727$ | $<0.001$ |
+
+**判定: 仮説は棄却** (事前基準 = スライド 1 の「$\beta_\text{typeA}>0$ かつ $p<0.05$」に符号で反するため)
+- $\beta_\text{typeA} = -1.13$ と強く負 → バーストを持つ note はむしろ **削除されにくい**
+- $|\beta_\text{typeA}| > |\beta_\text{typeB}|$ で TypeA の "保護効果" のほうが強い
+
+**解釈**: TypeA は polarity 分散のみで**投票方向 (Helpful / Not Helpful) を区別していない**ため、同陣営集中には「攻撃」と「防衛」の両方が混ざりうる。よって「TypeA バーストが**保護を引き起こした** (支持陣営の防衛 rally)」と因果的に読むよりは、「**サポートされやすい note に TypeA が出やすい**」(合意の取れた note に同陣営の piling-on が後追いで起きる、selection 寄り) と捉える方が現データに対して安全。causal な攻撃 vs 防衛の特定には投票方向の観測が必要で、設計拡張 (pro-rally / con-rally 分割) が今後の課題。頑健性は SEED=1 でも同符号・同桁・$p<0.001$ で再現済 (appendix)。
+
+---
+
+# Appendix (補助スライド・必要に応じて表示)
+
+以下は本編から外した詳細・補助資料。手法の細部、Quality スコア設計、頑健性チェック、想定質問など。
+
+---
+
+## A1 — 政治トピック抽出 / サンプリング
 
 - ノート本文 `summary` を **単語境界 `\b` 付き正規表現**でフィルタ（政治キーワード辞書、約 40 語: `trump`, `election`, `abortion`, `immigration`, `supreme court`, ... ）。
   - 旧実装の単純な部分一致では `vote` → `devote` / `voter` 等が誤マッチしていたため `\b...\b` で囲った。
@@ -92,63 +140,33 @@ X が公開している 3 種の TSV（日次更新）:
 
 ---
 
-## スライド 7 — ③ Polarity（評価者の立場ベクトル）
+## A2 — Polarity 補足 (本編スライド 3 の補強)
 
-**目的**: 各 rater を 2 次元ベクトル $(x, y)$ で表し、「似た note を同じように評価する人」を近づける。
+> 手順・SVD 式は本編スライド 3 を参照。ここでは本編に載せきれなかった設計判断のみ。
 
-**手順**
+- **rater 除外基準**: $<5$ 件しか評価していない rater は除外（polarity が雑音になるため）。`fit_transform` で計算された値を rater $i$ の polarity として採用。
+- **成分の解釈**: 2 次元のうち第 1 成分が「左右」、第 2 成分がそれと直交する変動を捉える想定。
 
-1. 評価を数値化:
-   $$ s = \begin{cases} +1 & \text{HELPFUL} \\ 0 & \text{SOMEWHAT\_HELPFUL} \\ -1 & \text{NOT\_HELPFUL} \end{cases} $$
-2. **各 rater の最初の $N=50$ 件だけ**採用（後述の循環論法回避のため）。
-3. 疎行列 $M \in \mathbb{R}^{R \times N_\text{note}}$ を作る:
-   $$ M_{ij} = s_{ij} \quad (\text{rater } i\ \text{が note } j\ \text{に付けた score}) $$
-4. **Truncated SVD** で rank-2 近似:
-   $$ M \approx U_2\, \Sigma_2\, V_2^{\!\top},\qquad U_2 \in \mathbb{R}^{R \times 2} $$
-   rater $i$ の polarity $= U_2[i,:] \cdot \Sigma_2$（sklearn の `fit_transform` の返り値）。
-5. $<5$ 件しか評価していない rater は除外（雑音防止）。
-
-> 2 次元のうち第 1 成分が「左右」、第 2 成分がそれと直交する変動を捉える。
+**次元 2 の妥当性 (本番実測, frac=0.30, SEED=42, N_rater=401,045)**
+`explained_variance_ratio_` は **PC1 = 0.2%, PC2 = 0.1%**。比率が小さいのは rater×note 行列が極端に疎 (ほぼ全エントリ 0) で**疎データ全体の分散**に対する 2 次元近似の比が本質的に小さくなるため。重要なのは「主要な変動方向を 2 軸が拾えているか」で、後段の $\beta_\text{typeA}$ が SE $\approx 0.10$ / $p<0.001$ で SEED 間も同符号・同桁に再現することが間接的 validation (polarity が雑音なら係数は不安定になるはず)。分散 $= \mathrm{Var}(x)+\mathrm{Var}(y)$ なので軸選択にも robust。
 
 ---
 
-## スライド 8 — なぜ「最初の 50 件だけ」なのか（循環論法回避）
+## A3 — 循環論法回避の論理チェーン (本編スライド 3 の補強)
 
-もし全期間の評価を使うと:
+> 本編スライド 3 では結論のみ。質問されたらこのチェーンで説明する。
+
+全期間の評価を使うと:
 
 - 「note が Not Helpful になった後」の評価も polarity に混ざる
-- ⇒ polarity はすでに **目的変数 (deleted) の情報を含んだ量**になる
+- ⇒ polarity はすでに **目的変数 (`deleted`) の情報を含んだ量**になる
 - ⇒ その polarity で TypeA/B を決めて回帰すると、**目的変数で説明変数を作っている** (target leakage)
 
-**対策**: rater 単位で時系列ソート → 先頭 50 件だけで polarity を固定。
-→ polarity は「その人が普段どっち陣営か」を表す **時間的に先行する量** になる。
+**対策**: rater 単位で時系列ソート → 先頭 50 件で polarity を固定 → polarity は **時間的に先行する量** になる。
 
 ---
 
-## スライド 9 — ④ バースト検出
-
-**全体の平均評価速度**:
-$$ v_\text{avg} = \frac{n_\text{total}}{t_\text{last} - t_\text{first}} \qquad \text{（1 note 内）} $$
-
-**局所速度** (連続する $k = \text{MIN\_COUNT} = 5$ 件のウィンドウ):
-$$ v_\text{local}(i) = \frac{k}{\max\!\big(t_{i+k-1} - t_i,\ 1\text{ ms}\big)} $$
-
-**バースト条件**:
-$$ v_\text{local}(i) \ \ge\ \alpha \cdot v_\text{avg},\qquad \alpha = \text{BURST\_MULTIPLIER} = 3.0 $$
-
-条件を満たす $i$ が見つかったら、その区間をバーストとする。簡略化のため **1 note につき最初の 1 バーストのみ**採用。
-
-> 直感: 「その note の普段ペースの 3 倍以上速く、5 件連続で評価が来た区間」。
-
----
-
-## スライド 10 — ⑤ TypeA / TypeB 分類
-
-バースト中の $k$ 人の rater について polarity の**分散の和**を計算:
-$$ V = \mathrm{Var}(x_1,\dots,x_k) + \mathrm{Var}(y_1,\dots,y_k) $$
-
-**相対基準で分類**（残ったバーストの polarity 分散の**中央値** $\tilde V$ を閾値）:
-$$ \text{burst\_type} = \begin{cases} A & \text{if } V \le \tilde V \quad(\text{同じ陣営} = \text{陣営反応}) \\ B & \text{if } V > \tilde V \quad(\text{バラバラ} = \text{自然拡散}) \end{cases} $$
+## A4 — TypeA/B 分類の設計詳細
 
 **polarity が決まる rater が 2 人未満のバーストの扱い** (= 分類不能):
 
@@ -163,7 +181,7 @@ $$ \text{burst\_type} = \begin{cases} A & \text{if } V \le \tilde V \quad(\text{
 
 ---
 
-## スライド 11 — ⑥ Quality スコア（LLM 学習済重み）
+## A5 — Quality スコア（LLM 学習済重み）
 
 **事前学習**: Claude が 200 件の note に $\{0,1\}$ ラベル付 → ロジスティック回帰で係数学習（CV AUC = 0.894）。
 
@@ -186,36 +204,7 @@ $$ \text{quality} = \sigma(z) = \frac{1}{1+e^{-z}} \in [0,1] $$
 
 ---
 
-## スライド 12 — ⑥ ロジスティック回帰（メイン）
-
-**目的変数**: $\text{deleted} = \mathbb{1}[\text{status}=\text{CURRENTLY\_RATED\_NOT\_HELPFUL}]$
-
-**回帰式 (log-odds)**:
-
-$$
-\log\!\frac{\Pr(\text{deleted}=1)}{\Pr(\text{deleted}=0)}
-= \beta_0
-+ \beta_1\,\text{type\_a}
-+ \beta_2\,\text{type\_b}
-+ \beta_3\,\text{quality}
-+ \beta_4\,\log(1+\text{ratings\_count})
-$$
-
-ここで
-
-- `type_a`, `type_b` $\in \{0,1\}$ (両方 1 になることはない: 1 note 1 バースト)
-- `quality` $\in [0,1]$
-- $\log(1+\text{ratings\_count})$ で**人気度を control**（バーストは構造的に評価数と正相関するため必須）。
-
-**注意**: ナイーブな control 変数 `trend` (前半スコア−後半スコア) は目的変数と同じ生データから作られる **bad control** なので削除した。
-
-**診断**: 相関行列と VIF を自動 print し、多重共線性がないか確認。
-
-> 補足: スモークテスト (frac=0.01, N=461) でも `log_ratings_count` は $\beta=-0.649,\ p<0.001$ と強く有意で、人気度 control を入れる設計の正しさが実データでも確認できている。
-
----
-
-## スライド 13 — 実装と再現性
+## A6 — 実装と再現性
 
 - リポジトリ: `hirototoda/toriumi_x3` / notebook は `notebooks/colab_simple.ipynb`
 - 設定セル 1 箇所編集するだけで実験可能:
@@ -231,9 +220,7 @@ $$
 
 ---
 
-## スライド 14 — 結果と議論
-
-**実行条件**: `SAMPLE_FRAC = 0.30`, `SEED = 42`, `POLARITY_FIRST_N = 50`, `BURST_MULTIPLIER = 3.0`, `BURST_MIN_COUNT = 5`
+## A7 — 結果フル表 + 頑健性
 
 **サンプル**
 - N = 14,253 (政治トピック notes, frac=0.30)
@@ -252,19 +239,31 @@ $$
 | (const)             | $+3.727$ | $<0.001$ | $[\,3.478,\ 3.975\,]$ |
 
 - Pseudo R² (Cox–Snell) = 0.147, $\log L = -7376.4$, Deviance = 14,753
-- VIF / 相関行列はサマリ未掲載（notebook 出力で別途確認）
 
-**判定**: **仮説は棄却** — それも*逆方向に*有意。
-当初仮説は「TypeA バースト (陣営反応) が Not Helpful 化を**引き起こす** ($\beta_\text{typeA}>0$)」だったが、本番では $\beta_\text{typeA}=-1.13\ (p<0.001)$ と**強く負**。バーストを持つ note はむしろ **削除されにくい**。TypeB も負だが effect は小さい ($-0.40$)。$|\beta_\text{typeA}| > |\beta_\text{typeB}|$ で、TypeA の "保護効果" のほうが強い。
+**多重共線性診断 (本番実測)**
+
+| 変数 | VIF | 判定 |
+|---|---:|---|
+| `type_a`            | 7.43 | 注意 |
+| `type_b`            | 7.49 | 注意 |
+| `quality`           | 1.01 | OK |
+| `log_ratings_count` | 1.12 | OK |
+
+- $\mathrm{corr}(\text{type\_a},\ \log\text{ratings\_count}) = 0.032$ (ほぼゼロ — `log_ratings_count` は独立な control として機能)
+- $\mathrm{corr}(\text{type\_a},\ \text{type\_b}) = -0.923$ (1 note 1 バーストかつ 96% のノートが A/B に分類されるためほぼ相補) → これが type_a/type_b の VIF>5 の構造的理由
+- **この相補性は悪性共線ではなくダミーコーディングの帰結**: 「バーストなし / TypeA / TypeB」の 3 値カテゴリを参照カテゴリ「バーストなし」+ 2 ダミーで表現しているだけ。各 $\beta$ は「バーストなし note と比べた効果」として解釈すれば共線性の影響は受けない。TypeA と TypeB を直接比べたいときは差 $\beta_\text{type\_a} - \beta_\text{type\_b} \approx -0.73$ を見ればよく、これは共線性の影響を受けにくい。
+- catastrophic 判定の VIF>10 には未達。SE $\approx 0.10$ で全係数 $p<0.001$ → 悪性共線なら SE が膨張するはずなので、結論は安定。
+
+**サンプル選抜の影響 (限界として要言及)**
+- `deleted` は `CURRENTLY_RATED_HELPFUL` / `CURRENTLY_RATED_NOT_HELPFUL` の 2 値のみで定義 ([src/simple/regression.py:28](src/simple/regression.py#L28) の `VALID_STATUSES`)。`NEEDS_MORE_RATINGS` の note は除外。
+- 検出バースト **106,673 件のうち最終特徴量に残るのは 13,695 件** のみ。バースト持ち note の大半は合意未達。
 
 **符号の妥当性チェック**
 - `quality` ↓ ($-1.87$): 質の高い note ほど消えにくい（事前予想と一致）
 - `log_ratings_count` ↓ ($-0.60$): 評価数の多い note ほど消えにくい（人気度 control が効いている）
 - バースト 2 変数も含めて 4 変数すべて負 → 「注目された / 質が高い note は消えにくい」という一貫した像。
 
-**逆方向の解釈**: TypeA の定義はバースト参加者の **polarity 分散**が小さいことを捉えるだけで、**投票方向 (Helpful / Not Helpful) は区別していない**。同陣営による集中投票は本来「反対陣営が攻撃する」シナリオを想定していたが、実データでは **支持陣営が note を守るための rally** を多く拾っている可能性が高い。"陣営反応" 仮説の検証には、TypeA をさらに **pro-rally / con-rally** に分ける拡張設計が必要。
-
-**頑健性** (SEED=1 を保険として追加実行済): 全 4 係数が同符号・同桁・$p<0.001$ で再現。$\beta_\text{typeA}$ は SEED=42 で $-1.129$、SEED=1 で $-1.020$ (差 0.11 ≈ SE) → **結論は SEED に頑健**。
+**頑健性** (SEED=1 を保険として追加実行済): 全 4 係数が同符号・同桁・$p<0.001$ で再現。
 
 | 変数 | SEED=42 β | SEED=1 β | $p$ |
 |---|---:|---:|:---:|
@@ -282,66 +281,50 @@ $$
 
 ---
 
-## 付録 — 発表の流れ（台本用メモ）
+## A8 — 想定質問 (インデックス)
 
-| 時間 | スライド | 話すこと |
-|---|---|---|
-| 0:00 | 1 | タイトル・自己紹介 |
-| 0:30 | 2–3 | 問いと仮説判定表 |
-| 2:00 | 4–5 | データとパイプライン全体像 |
-| 3:30 | 6 | トピック抽出・サンプリング |
-| 4:30 | 7–8 | Polarity の数式と「なぜ 50 件で固定か」 |
-| 6:30 | 9–10 | バースト検出と TypeA/B の閾値 |
-| 8:00 | 11 | Quality スコアの式と寄与度 |
-| 9:00 | 12 | 回帰式（メイン）と bad control の議論 |
-| 10:30 | 13–14 | 再現性と結果、質疑 |
+> 各回答は対応する A セクション / 本編スライドを指す形で簡潔に。詳細はリンク先で。
 
----
+### 結果の解釈
 
-## 付録 — 想定質問
-
-### 結果の解釈について
-
-- **「$\beta_\text{typeA}$ が負になった = 仮説とは逆だが、これは何を意味する?」**
-  → TypeA の定義はバースト参加者の polarity *分散*のみを見ており、**投票の方向 (Helpful / Not Helpful) を区別していない**（[src/simple/burst.py:62-98](src/simple/burst.py#L62-L98)）。同陣営の集中投票には「反対派が note を攻撃」と「支持派が note を防衛」の両方が混ざる。本番で $\beta_\text{typeA}=-1.13$ と強い負だったことは、実データでは**防衛 rally のほうが多数派**だった可能性が高いことを示唆する。"陣営反応" 仮説の正面検証には設計拡張が必要 (下記)。
-
-- **「TypeA を pro-rally / con-rally に分けたらどうなるの?」**
-  → 本研究では未実装。バースト中の評価の helpfulnessLevel の平均符号で 2 分する拡張が考えられる。今後の課題。
-
-- **「両方有意（負）の場合、コード側の判定文は何と出る?」**
-  → 現状 [src/simple/regression.py:127-130](src/simple/regression.py#L127-L130) の verdict 文字列は **符号を見ず p のみ**で判定するため、「TypeA/B 両方有意 → 自然拡散も寄与 (仮説部分支持)」と出る。発表ではスライド 14 で**符号を踏まえた判定**に上書きしている。
+- **$\beta_\text{typeA}$ が負 (仮説と逆) は何を意味する?** → 本編スライド 6 に解釈サマリ。実装上の根拠は [src/simple/burst.py:62-98](src/simple/burst.py#L62-L98) (polarity 分散のみで投票方向を見ない)。
+- **TypeA を pro-rally / con-rally に分けたら?** → 未実装。バースト中の helpfulnessLevel 平均符号で 2 分する拡張が候補。今後の課題。
+- **両方有意（負）の場合コード側の判定文は?** → [src/simple/regression.py:127-130](src/simple/regression.py#L127-L130) の verdict 文字列は **p のみ**で「両方有意 → 部分支持」を返す簡易実装。一方、**本研究の事前基準はスライド 1 の「$\beta_\text{typeA}>0$ かつ $p<0.05$」** であり、符号が逆 ($\beta_\text{typeA}=-1.13$) の時点で棄却が事前基準と整合する (上書きではなく一貫)。コード側の文字列は符号チェックを含めない初期実装の名残で、判定の根拠ではない。
 
 ### 設計の妥当性
 
 - 「TruncatedSVD で次元 2 にするのは根拠ある?」
-  → [src/simple/polarity.py](src/simple/polarity.py) で `explained_variance_ratio_` を出力。本番実測値 (frac=0.30, SEED=42, N_rater=401,045): **PC1=0.2%, PC2=0.1%**。比率が小さいのは rater×note 行列が極端に疎 (401k×N、ほぼ全エントリ 0) で**疎データ全体の分散** に対する 2 次元近似の比は本質的に小さくなるため。重要なのは「主要な変動方向を 2 軸が拾えているか」で、後段の $\beta_\text{typeA}$ が SE $\approx 0.10$ / $p<0.001$ で得られ SEED 間でも同符号・同桁に再現することが間接的な validation になっている (polarity が雑音なら係数は不安定になるはず)。現設計は分散 = $\mathrm{Var}(x)+\mathrm{Var}(y)$ で 2 次元 polarity 平面の散らばりを測るため軸選択にも robust。
+  → A2 参照。PC1=0.2% / PC2=0.1% (本番実測) で比率は小さいが、これは行列が極端に疎なため。後段の $\beta_\text{typeA}$ が SEED 間で同符号・同桁に再現することが間接的 validation。
 
 - 「バースト閾値 3.0 と 5 件はどう決めた?」
   → notebook 設定セルで変更可能（[scripts/run_simple.py:57-58](scripts/run_simple.py#L57-L58)）。本研究ではこの値の頑健性まではスコープ外。閾値を変えると TypeA/B 件数のスケールは動くが、median 分割なので相対的な分類は大きくは変わらない設計。
 
+- 「TypeA/B を `polarity_variance` の median で 2 分するのは恣意的では? 強制的に 50/50 になるし、絶対閾値ではない」
+  → **指摘は正しい**。median 分割は (1) 結果集合の 50% を強制的に TypeA に振る、(2) 閾値そのものはサンプル構成依存、(3) 連続量 `polarity_variance` を二値化するので情報損失あり、という 3 点で恣意的。本研究で採用したのは以下の理由:
+    - **相対基準は意図的設計**: 絶対閾値 (例: $V < 0.1$ を TypeA) を置くとサンプル構成 (frac, 政治トピック比率) で TypeA の定義自体が変わり、「同じ分析を別データセットでやった」比較が崩れる。median 分割なら「この分析内の同陣営度上位 50%」と一貫した解釈ができる。
+    - **median の位置は SEED 間で安定**: SEED=42 と SEED=1 で $\beta_\text{typeA}$ が同符号・同桁 ($-1.13$ vs $-1.02$) → median 自体が SEED で大きく動いていない実証。
+    - **二値化は解釈優先**: 連続変数だと $\beta$ の単位が「variance 1 単位上がるごとの log-odds 変化」になり聴衆に伝わりにくい。「分散小さい群 vs 大きい群」の対比の方が直感的。
+  → **限界として明示**: 連続版 (`polarity_variance` をそのまま回帰に入れる) や quartile 分割 (上下 25%) での sensitivity check は未実施 — 今後の課題。
+
 - 「quality の LLM ラベル 200 件で足りる?」
-  → 事前学習 CV AUC = 0.894。本番 14k notes でも `quality` は最大の effect ($\beta=-1.86$) を維持し、寄与度（domain_trust 44%）は事前知識と整合。再学習は `scripts/experiments/train_quality_model.py`。
+  → 事前 CV AUC = 0.894 (A5)、本番でも $\beta=-1.86$ を維持 (A7) で外挿は妥当。再学習は `scripts/experiments/train_quality_model.py`。
 
 - 「`trend` を control に入れたほうが良くない?」
-  → 目的変数 `deleted` と**同じ生データ** (`helpfulnessLevel` 系列) から作られる **bad control**。入れると目的変数の一部を control する形になり $\beta_\text{typeA}$ を不当に押し下げる。
+  → 本編スライド 5 参照。`helpfulnessLevel` 系列由来で目的変数と同じ生データ → bad control。
 
 - 「`type_a` と `log_ratings_count` の正相関で多重共線性は?」
-  → バースト判定が `min_count=5` 件以上を要求するため構造的な正相関の懸念はあった（[src/simple/regression.py:14-20](src/simple/regression.py#L14-L20) 参照）が、本番実測では杞憂だった。本番実測値:
-    - `type_a` VIF = **7.43** (注意), `type_b` VIF = **7.49** (注意), `quality` VIF = **1.01** (OK), `log_ratings_count` VIF = **1.12** (OK)
-    - 相関 `corr(type_a, log_ratings_count)` = **0.032** (ほぼゼロ) — 当初懸念した正相関は実データでは消えており、`log_ratings_count` は独立な control として機能している。
-    - type_a / type_b の VIF が 5 を超えるのは別の構造的理由による: $\mathrm{corr}(\text{type\_a}, \text{type\_b}) = -0.923$ (1 note 1 バーストかつ 96% のノートが A/B どちらかに分類されるため、ほぼ相補な指標になる)。catastrophic 判定の VIF>10 には届かず、実際 SE も $\approx 0.10$ に収まり全係数 $p<0.001$ で結論は安定。
+  → A7 の VIF 表参照。当初構造的正相関を懸念したが、実測 corr=0.032 でほぼゼロ。type_a/type_b の VIF>5 は両者の相補性 (corr=-0.923) によるもので catastrophic ではない。
 
 ### サンプル設計と外的妥当性
 
 - 「`deleted` は `CURRENTLY_RATED_NOT_HELPFUL` だけ? `NEEDS_MORE_RATINGS` はどうした?」
-  → 回帰は `CURRENTLY_RATED_HELPFUL` / `CURRENTLY_RATED_NOT_HELPFUL` の 2 値のみで実施（[src/simple/regression.py:28](src/simple/regression.py#L28) の `VALID_STATUSES`）。「**最終的な合意に至った note**」だけが分析対象。
-  → 副作用として、`NEEDS_MORE_RATINGS` の note は除外される。本番では検出バースト 106,673 件のうち最終特徴量に残るのは 13,695 件のみで、**バースト持ち note の大半は合意未達**。この選抜の影響は限界として要言及。
+  → A7「サンプル選抜の影響」参照。`HELPFUL`/`NOT_HELPFUL` の 2 値のみで `NEEDS_MORE_RATINGS` は除外。検出バースト 106,673 → 残 13,695 でバースト持ち note の大半は合意未達 — 限界として要言及。
 
 - 「frac=0.30 単一規模での検証で十分?」
-  → 本番 $p<0.001$ で SE も小さいため、frac=0.50, 1.0 に上げても点推定はほとんど動かない見込み。SEED=1 の保険実行で同符号・同桁を確認することで頑健性は担保。
+  → A6/A7 の SEED=1 比較で全 4 係数が同符号・同桁・$p<0.001$ を確認済。$p<0.001$ & SE 小なので frac を上げても点推定はほとんど動かない見込み。
 
 - 「政治トピック判定がキーワード40語ベース、これでカバー漏れない?」
-  → 単語境界 `\b` 付き正規表現で `vote` → `devote` 等の誤マッチは排除済み（[src/simple/topic.py](src/simple/topic.py)）。ただし *recall* 側 (政治的だがキーワードに無い note) は取りこぼす。今回の被験 14k notes は "政治の中でも辞書ヒットした部分" の subsample である点は限界。
+  → A1 の通り precision 側 (`\b` で誤マッチ排除) は対応済。**recall 側** (政治的だがキーワードに無い note) は取りこぼす。今回の 14k notes は "政治の中でも辞書ヒットした部分" の subsample という限界がある。
 
 - 「1 note 1 バーストの簡略化で情報を捨てていない?」
   → 捨てている (`break` で先頭バーストのみ採用、[src/simple/burst.py:55](src/simple/burst.py#L55))。複数バーストを区別する設計 (e.g. 最も激しいバーストを採用、バースト回数を control 変数化) は今後の拡張候補。
